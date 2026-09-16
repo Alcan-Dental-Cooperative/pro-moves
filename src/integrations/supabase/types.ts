@@ -133,6 +133,80 @@ export type Database = {
         }
         Relationships: []
       }
+      ask_conversations: {
+        Row: {
+          created_at: string
+          id: string
+          staff_id: string
+          title: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          staff_id: string
+          title?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          staff_id?: string
+          title?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ask_conversations_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ask_conversations_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "view_evaluation_items_enriched"
+            referencedColumns: ["staff_id"]
+          },
+        ]
+      }
+      ask_messages: {
+        Row: {
+          cited_document_ids: string[]
+          content: string
+          conversation_id: string
+          created_at: string
+          id: string
+          role: string
+        }
+        Insert: {
+          cited_document_ids?: string[]
+          content: string
+          conversation_id: string
+          created_at?: string
+          id?: string
+          role: string
+        }
+        Update: {
+          cited_document_ids?: string[]
+          content?: string
+          conversation_id?: string
+          created_at?: string
+          id?: string
+          role?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ask_messages_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "ask_conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       coach_baseline_assessments: {
         Row: {
           coach_staff_id: string
@@ -1015,6 +1089,290 @@ export type Database = {
           },
         ]
       }
+      corpus_chunk_sync_state: {
+        Row: {
+          chunked_at: string | null
+          dirty: boolean
+          document_id: string
+          embedded_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          chunked_at?: string | null
+          dirty?: boolean
+          document_id: string
+          embedded_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          chunked_at?: string | null
+          dirty?: boolean
+          document_id?: string
+          embedded_at?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "corpus_chunk_sync_state_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: true
+            referencedRelation: "corpus_documents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      corpus_chunks: {
+        Row: {
+          chunk_index: number
+          content: string
+          created_at: string
+          document_id: string
+          embedding: string | null
+          fts: unknown
+          id: string
+        }
+        Insert: {
+          chunk_index: number
+          content: string
+          created_at?: string
+          document_id: string
+          embedding?: string | null
+          fts?: unknown
+          id?: string
+        }
+        Update: {
+          chunk_index?: number
+          content?: string
+          created_at?: string
+          document_id?: string
+          embedding?: string | null
+          fts?: unknown
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "corpus_chunks_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "corpus_documents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      corpus_documents: {
+        Row: {
+          audience: string | null
+          body: string | null
+          created_at: string
+          created_by: string | null
+          expert_area_id: string | null
+          id: string
+          location_scope: string | null
+          org_id: string
+          posted_at: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          source_item_id: string | null
+          source_kind: string
+          source_url: string | null
+          stale_risk: boolean
+          status: string
+          summary: string | null
+          tier: number | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          audience?: string | null
+          body?: string | null
+          created_at?: string
+          created_by?: string | null
+          expert_area_id?: string | null
+          id?: string
+          location_scope?: string | null
+          org_id: string
+          posted_at?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          source_item_id?: string | null
+          source_kind?: string
+          source_url?: string | null
+          stale_risk?: boolean
+          status?: string
+          summary?: string | null
+          tier?: number | null
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          audience?: string | null
+          body?: string | null
+          created_at?: string
+          created_by?: string | null
+          expert_area_id?: string | null
+          id?: string
+          location_scope?: string | null
+          org_id?: string
+          posted_at?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          source_item_id?: string | null
+          source_kind?: string
+          source_url?: string | null
+          stale_risk?: boolean
+          status?: string
+          summary?: string | null
+          tier?: number | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "corpus_documents_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "corpus_documents_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "view_evaluation_items_enriched"
+            referencedColumns: ["staff_id"]
+          },
+          {
+            foreignKeyName: "corpus_documents_expert_area_id_fkey"
+            columns: ["expert_area_id"]
+            isOneToOne: false
+            referencedRelation: "corpus_expert_areas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "corpus_documents_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "corpus_documents_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "corpus_documents_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "view_evaluation_items_enriched"
+            referencedColumns: ["staff_id"]
+          },
+        ]
+      }
+      corpus_expert_areas: {
+        Row: {
+          area_name: string
+          created_at: string
+          id: string
+          org_id: string
+          owner_staff_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          area_name: string
+          created_at?: string
+          id?: string
+          org_id: string
+          owner_staff_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          area_name?: string
+          created_at?: string
+          id?: string
+          org_id?: string
+          owner_staff_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "corpus_expert_areas_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "corpus_expert_areas_owner_staff_id_fkey"
+            columns: ["owner_staff_id"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "corpus_expert_areas_owner_staff_id_fkey"
+            columns: ["owner_staff_id"]
+            isOneToOne: false
+            referencedRelation: "view_evaluation_items_enriched"
+            referencedColumns: ["staff_id"]
+          },
+        ]
+      }
+      corpus_glossary: {
+        Row: {
+          aliases: string[]
+          category: string
+          created_at: string
+          definition: string
+          id: string
+          maps_to: string | null
+          notes: string | null
+          org_id: string
+          provenance: string
+          source_document_ids: string[]
+          term: string
+          updated_at: string
+        }
+        Insert: {
+          aliases?: string[]
+          category?: string
+          created_at?: string
+          definition: string
+          id?: string
+          maps_to?: string | null
+          notes?: string | null
+          org_id: string
+          provenance?: string
+          source_document_ids?: string[]
+          term: string
+          updated_at?: string
+        }
+        Update: {
+          aliases?: string[]
+          category?: string
+          created_at?: string
+          definition?: string
+          id?: string
+          maps_to?: string | null
+          notes?: string | null
+          org_id?: string
+          provenance?: string
+          source_document_ids?: string[]
+          term?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "corpus_glossary_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       deputy_connections: {
         Row: {
           access_token: string
@@ -1603,6 +1961,9 @@ export type Database = {
           domain_id: number | null
           domain_name: string | null
           evaluation_id: string
+          glow_source_name: string | null
+          glow_source_staff_id: string | null
+          glow_source_type: string | null
           interview_prompt_snapshot: string | null
           observer_glow: string | null
           observer_grow: string | null
@@ -1622,6 +1983,9 @@ export type Database = {
           domain_id?: number | null
           domain_name?: string | null
           evaluation_id: string
+          glow_source_name?: string | null
+          glow_source_staff_id?: string | null
+          glow_source_type?: string | null
           interview_prompt_snapshot?: string | null
           observer_glow?: string | null
           observer_grow?: string | null
@@ -1641,6 +2005,9 @@ export type Database = {
           domain_id?: number | null
           domain_name?: string | null
           evaluation_id?: string
+          glow_source_name?: string | null
+          glow_source_staff_id?: string | null
+          glow_source_type?: string | null
           interview_prompt_snapshot?: string | null
           observer_glow?: string | null
           observer_grow?: string | null
@@ -2237,6 +2604,168 @@ export type Database = {
           },
         ]
       }
+      lead_meetings: {
+        Row: {
+          created_at: string
+          created_by: string
+          id: string
+          internal_summary: string | null
+          meeting_date: string
+          organization_id: string
+          raw_transcript: string | null
+          updated_at: string
+          week_start_date: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          id?: string
+          internal_summary?: string | null
+          meeting_date: string
+          organization_id: string
+          raw_transcript?: string | null
+          updated_at?: string
+          week_start_date: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          id?: string
+          internal_summary?: string | null
+          meeting_date?: string
+          organization_id?: string
+          raw_transcript?: string | null
+          updated_at?: string
+          week_start_date?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_meetings_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lead_meetings_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "view_evaluation_items_enriched"
+            referencedColumns: ["staff_id"]
+          },
+          {
+            foreignKeyName: "lead_meetings_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lead_week_blasts: {
+        Row: {
+          body: string
+          created_at: string
+          created_by: string
+          excluded_staff_ids: string[]
+          failed_count: number | null
+          id: string
+          location_id: string | null
+          organization_id: string
+          recipient_count: number | null
+          sent_at: string | null
+          sent_by: string | null
+          status: string
+          subject: string
+          updated_at: string
+          week_start_date: string
+        }
+        Insert: {
+          body?: string
+          created_at?: string
+          created_by: string
+          excluded_staff_ids?: string[]
+          failed_count?: number | null
+          id?: string
+          location_id?: string | null
+          organization_id: string
+          recipient_count?: number | null
+          sent_at?: string | null
+          sent_by?: string | null
+          status?: string
+          subject?: string
+          updated_at?: string
+          week_start_date: string
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          created_by?: string
+          excluded_staff_ids?: string[]
+          failed_count?: number | null
+          id?: string
+          location_id?: string | null
+          organization_id?: string
+          recipient_count?: number | null
+          sent_at?: string | null
+          sent_by?: string | null
+          status?: string
+          subject?: string
+          updated_at?: string
+          week_start_date?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_week_blasts_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lead_week_blasts_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "view_evaluation_items_enriched"
+            referencedColumns: ["staff_id"]
+          },
+          {
+            foreignKeyName: "lead_week_blasts_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lead_week_blasts_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "v_onboarding_progress"
+            referencedColumns: ["location_id"]
+          },
+          {
+            foreignKeyName: "lead_week_blasts_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lead_week_blasts_sent_by_fkey"
+            columns: ["sent_by"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lead_week_blasts_sent_by_fkey"
+            columns: ["sent_by"]
+            isOneToOne: false
+            referencedRelation: "view_evaluation_items_enriched"
+            referencedColumns: ["staff_id"]
+          },
+        ]
+      }
       locations: {
         Row: {
           active: boolean | null
@@ -2399,6 +2928,7 @@ export type Database = {
           created_by: string | null
           description: string | null
           id: string
+          migrated_action_id: number | null
           org_id: string
           practice_types: string[]
           role_id: number | null
@@ -2413,6 +2943,7 @@ export type Database = {
           created_by?: string | null
           description?: string | null
           id?: string
+          migrated_action_id?: number | null
           org_id: string
           practice_types?: string[]
           role_id?: number | null
@@ -2427,6 +2958,7 @@ export type Database = {
           created_by?: string | null
           description?: string | null
           id?: string
+          migrated_action_id?: number | null
           org_id?: string
           practice_types?: string[]
           role_id?: number | null
@@ -2440,6 +2972,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "competencies"
             referencedColumns: ["competency_id"]
+          },
+          {
+            foreignKeyName: "organization_pro_moves_migrated_action_id_fkey"
+            columns: ["migrated_action_id"]
+            isOneToOne: false
+            referencedRelation: "pro_moves"
+            referencedColumns: ["action_id"]
           },
           {
             foreignKeyName: "organization_pro_moves_org_id_fkey"
@@ -2536,11 +3075,13 @@ export type Database = {
           email_sign_off: string | null
           hr_email: string | null
           id: string
+          is_demo: boolean
           logo_url: string | null
           name: string
           practice_type: string
           reply_to_email: string | null
           slug: string
+          timezone: string
         }
         Insert: {
           app_display_name?: string | null
@@ -2550,11 +3091,13 @@ export type Database = {
           email_sign_off?: string | null
           hr_email?: string | null
           id?: string
+          is_demo?: boolean
           logo_url?: string | null
           name: string
           practice_type?: string
           reply_to_email?: string | null
           slug: string
+          timezone?: string
         }
         Update: {
           app_display_name?: string | null
@@ -2564,11 +3107,13 @@ export type Database = {
           email_sign_off?: string | null
           hr_email?: string | null
           id?: string
+          is_demo?: boolean
           logo_url?: string | null
           name?: string
           practice_type?: string
           reply_to_email?: string | null
           slug?: string
+          timezone?: string
         }
         Relationships: []
       }
@@ -2971,6 +3516,8 @@ export type Database = {
           baseline_released_by: string | null
           coach_scope_id: string | null
           coach_scope_type: string | null
+          coaching_enrolled_at: string | null
+          coaching_enrolled_by: string | null
           created_at: string | null
           email: string
           first_login_at: string | null
@@ -2994,6 +3541,7 @@ export type Database = {
           pause_reason: string | null
           paused_at: string | null
           primary_location_id: string | null
+          pwa_enabled: boolean
           role_id: number | null
           roles_updated_at: string | null
           scheduling_link: string | null
@@ -3006,6 +3554,8 @@ export type Database = {
           baseline_released_by?: string | null
           coach_scope_id?: string | null
           coach_scope_type?: string | null
+          coaching_enrolled_at?: string | null
+          coaching_enrolled_by?: string | null
           created_at?: string | null
           email: string
           first_login_at?: string | null
@@ -3029,6 +3579,7 @@ export type Database = {
           pause_reason?: string | null
           paused_at?: string | null
           primary_location_id?: string | null
+          pwa_enabled?: boolean
           role_id?: number | null
           roles_updated_at?: string | null
           scheduling_link?: string | null
@@ -3041,6 +3592,8 @@ export type Database = {
           baseline_released_by?: string | null
           coach_scope_id?: string | null
           coach_scope_type?: string | null
+          coaching_enrolled_at?: string | null
+          coaching_enrolled_by?: string | null
           created_at?: string | null
           email?: string
           first_login_at?: string | null
@@ -3064,6 +3617,7 @@ export type Database = {
           pause_reason?: string | null
           paused_at?: string | null
           primary_location_id?: string | null
+          pwa_enabled?: boolean
           role_id?: number | null
           roles_updated_at?: string | null
           scheduling_link?: string | null
@@ -3071,6 +3625,20 @@ export type Database = {
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "staff_coaching_enrolled_by_fkey"
+            columns: ["coaching_enrolled_by"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_coaching_enrolled_by_fkey"
+            columns: ["coaching_enrolled_by"]
+            isOneToOne: false
+            referencedRelation: "view_evaluation_items_enriched"
+            referencedColumns: ["staff_id"]
+          },
           {
             foreignKeyName: "staff_organization_id_fkey"
             columns: ["organization_id"]
@@ -4271,6 +4839,10 @@ export type Database = {
         Returns: number
       }
       bulk_upsert_pro_moves: { Args: { pro_moves_data: Json }; Returns: Json }
+      can_current_user_view_staff: {
+        Args: { p_staff_id: string }
+        Returns: boolean
+      }
       check_sequencer_gate: {
         Args: { p_org_id: string; p_role_id?: number }
         Returns: Json
@@ -4768,7 +5340,6 @@ export type Database = {
           user_id: string
         }[]
       }
-      get_user_org_id: { Args: { p_user_id: string }; Returns: string }
       has_survey_assignment: { Args: { _survey_id: string }; Returns: boolean }
       is_admin: { Args: { check_user_id: string }; Returns: boolean }
       is_assigned_doctor_coach: {
@@ -4824,10 +5395,6 @@ export type Database = {
         Args: { p_eval_id: string; p_released_by: string; p_visible: boolean }
         Returns: undefined
       }
-      resolve_role_display_name: {
-        Args: { p_org_id: string; p_role_id: number }
-        Returns: string
-      }
       save_eval_acknowledgement_and_focus:
         | {
             Args: { p_action_ids?: number[]; p_eval_id: string }
@@ -4842,6 +5409,21 @@ export type Database = {
             }
             Returns: undefined
           }
+      search_corpus: {
+        Args: {
+          match_count?: number
+          query_embedding?: string
+          query_text: string
+        }
+        Returns: {
+          document_id: string
+          rank: number
+          snippet: string
+          source_url: string
+          status: string
+          title: string
+        }[]
+      }
       seq_latest_quarterly_evals:
         | {
             Args: { p_org_id: string; p_role_id: number }
@@ -4881,12 +5463,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -4910,11 +5492,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -4935,11 +5517,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -4960,11 +5542,11 @@ export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -4977,11 +5559,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
