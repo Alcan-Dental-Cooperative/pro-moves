@@ -10,9 +10,9 @@ journey) and prep John's meeting with Bobby about staff reality on the ground.
 - **Training day is set: Tuesday 6 October 2026.** Tuesday is the data-backed quiet day (7.35 patients/day vs Wednesday 9.46), so the date is already optimal.
 
 ## Next
-1. **Sharpen the training arc** (below) into a facilitator-grade agenda: timings, groupings, role-play casting slots to fill once the nurse roster arrives.
-2. **Polish the question list into a presentable one-pager, with every question citing its source** using the source key below. John wants to see where each question comes from (a meeting transcript, the data workbook, an email).
-3. Fold in Bobby's answers when John returns from the meeting; they set casting, PM involvement, and how much anxiety-management the day needs.
+1. ~~Sharpen the training arc into a facilitator-grade agenda~~ **Done 2026-09-16:** `docs/alcan-avenue-training-day-agenda.md`. Full run sheets with timings, casting sheet with ⟨TBD⟩ slots keyed to the Bobby questions, prep checklist, contingencies (half-day, nervous team, therapist absent).
+2. ~~Polish the question list into a cited one-pager~~ **Done 2026-09-16:** `docs/outbound/bobby-meeting-questions.md`. Nine questions, each with why-now and source tags, source key at the bottom.
+3. Fold in Bobby's answers when John returns from the meeting; they set casting (agenda ⟨TBD⟩ slots), PM involvement, and how much anxiety-management the day needs. Then fill the casting sheet and pick the contingency variants in the agenda.
 
 ## Source key (use these tags when citing)
 - **[REV-CALL]** Bobby and Sam review call, 2026-08-04. Answers recorded in journey doc §13.
@@ -52,6 +52,8 @@ Principle: **the day trains the seams, not role depth.** Role-plays in the real 
 - **Rehearse Bobby**: he plays the dentist in role-plays; agree he stays in character and saves coaching for debriefs.
 
 ## Files that matter
+- `docs/alcan-avenue-training-day-agenda.md` — facilitator agenda for 6 Oct, ⟨TBD⟩ casting slots await Bobby's answers
+- `docs/outbound/bobby-meeting-questions.md` — the cited nine-question one-pager for the meeting
 - `docs/alcan-avenue-patient-journey.md` — the agreed v0.3 vision; §13 = every answered/open question with provenance
 - `docs/alcan-avenue-patient-journey-review-draft.md` — superseded review snapshot, do not work from it
 - `docs/reference/alcan-manager-kpi-scorecard-q2-2026-template.csv` — US manager scorecard the Avenue one adapts
