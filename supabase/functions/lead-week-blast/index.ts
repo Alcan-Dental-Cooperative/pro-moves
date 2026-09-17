@@ -193,7 +193,13 @@ async function handleDraft(admin: ReturnType<typeof createClient>, callerStaff: 
 
   // LRM-11: optional include_focus (default true) / meeting_ids (default
   // all of the week's meetings) let a targeted draft skip either source.
-  const selection = parseDraftSourceSelection(payload);
+  // Malformed values 400 rather than coercing, so a client bug can't
+  // silently flip the focus flag or broaden a targeted draft to the week.
+  const parsed = parseDraftSourceSelection(payload);
+  if (!parsed.valid) {
+    return jsonResponse({ error: parsed.error }, 400);
+  }
+  const selection = parsed.selection;
 
   let focusWeek: { id: string; framing: string | null } | null = null;
   let focusItems: { text: string; display_order: number }[] = [];

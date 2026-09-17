@@ -5,46 +5,66 @@
 import { describe, it, expect } from 'vitest';
 import { parseDraftSourceSelection, selectRequestedMeetings } from './draftValidation';
 
+function expectValid(payload: unknown) {
+  const result = parseDraftSourceSelection(payload);
+  if (!result.valid) throw new Error(`expected valid parse, got: ${result.error}`);
+  return result.selection;
+}
+
 describe('parseDraftSourceSelection', () => {
   it('defaults include_focus to true when omitted', () => {
-    expect(parseDraftSourceSelection({}).includeFocus).toBe(true);
+    expect(expectValid({}).includeFocus).toBe(true);
   });
 
   it('defaults meeting_ids to null (meaning "all") when omitted', () => {
-    expect(parseDraftSourceSelection({}).meetingIds).toBeNull();
+    expect(expectValid({}).meetingIds).toBeNull();
   });
 
   it('honors an explicit include_focus: false', () => {
-    expect(parseDraftSourceSelection({ include_focus: false }).includeFocus).toBe(false);
+    expect(expectValid({ include_focus: false }).includeFocus).toBe(false);
   });
 
   it('honors an explicit include_focus: true', () => {
-    expect(parseDraftSourceSelection({ include_focus: true }).includeFocus).toBe(true);
+    expect(expectValid({ include_focus: true }).includeFocus).toBe(true);
   });
 
-  it('coerces a truthy non-boolean include_focus', () => {
-    expect(parseDraftSourceSelection({ include_focus: 1 }).includeFocus).toBe(true);
+  it('rejects a non-boolean include_focus instead of coercing it', () => {
+    expect(parseDraftSourceSelection({ include_focus: 1 }).valid).toBe(false);
+  });
+
+  it('rejects the string "false" for include_focus (truthy string would flip intent)', () => {
+    expect(parseDraftSourceSelection({ include_focus: 'false' }).valid).toBe(false);
   });
 
   it('passes through a real meeting_ids array', () => {
-    expect(parseDraftSourceSelection({ meeting_ids: ['a', 'b'] }).meetingIds).toEqual(['a', 'b']);
+    expect(expectValid({ meeting_ids: ['a', 'b'] }).meetingIds).toEqual(['a', 'b']);
   });
 
   it('keeps an explicit empty meeting_ids array distinct from "not specified"', () => {
-    expect(parseDraftSourceSelection({ meeting_ids: [] }).meetingIds).toEqual([]);
+    expect(expectValid({ meeting_ids: [] }).meetingIds).toEqual([]);
   });
 
-  it('drops non-string entries from meeting_ids rather than trusting them', () => {
-    expect(parseDraftSourceSelection({ meeting_ids: ['a', 1, null, 'b'] }).meetingIds).toEqual(['a', 'b']);
+  it('dedupes repeated meeting ids so one meeting cannot be weighted twice', () => {
+    expect(expectValid({ meeting_ids: ['a', 'a', 'b'] }).meetingIds).toEqual(['a', 'b']);
   });
 
-  it('treats a non-array meeting_ids as "not specified"', () => {
-    expect(parseDraftSourceSelection({ meeting_ids: 'a' }).meetingIds).toBeNull();
+  it('rejects meeting_ids containing non-string entries instead of dropping them', () => {
+    expect(parseDraftSourceSelection({ meeting_ids: ['a', 1, null, 'b'] }).valid).toBe(false);
+  });
+
+  it('rejects a non-array meeting_ids instead of silently drafting from the whole week', () => {
+    expect(parseDraftSourceSelection({ meeting_ids: 'a' }).valid).toBe(false);
+  });
+
+  it('reports a usable error message on invalid input', () => {
+    const result = parseDraftSourceSelection({ meeting_ids: 'a' });
+    expect(result.valid).toBe(false);
+    if (!result.valid) expect(result.error).toMatch(/meeting_ids/);
   });
 
   it('handles a null/undefined payload without throwing', () => {
-    expect(parseDraftSourceSelection(null)).toEqual({ includeFocus: true, meetingIds: null });
-    expect(parseDraftSourceSelection(undefined)).toEqual({ includeFocus: true, meetingIds: null });
+    expect(expectValid(null)).toEqual({ includeFocus: true, meetingIds: null });
+    expect(expectValid(undefined)).toEqual({ includeFocus: true, meetingIds: null });
   });
 });
 

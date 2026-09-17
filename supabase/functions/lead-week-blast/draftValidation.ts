@@ -16,21 +16,45 @@ export interface DraftSourceSelection {
   meetingIds: string[] | null;
 }
 
+export type ParsedDraftSourceSelection =
+  | { valid: true; selection: DraftSourceSelection }
+  | { valid: false; error: string };
+
 /**
  * Parses handleDraft's optional `include_focus` (boolean, default true) and
  * `meeting_ids` (uuid array, default = all of the week's meetings) payload
- * fields. Non-string entries in `meeting_ids` are dropped rather than
- * trusted -- the actual ownership/week check happens in
- * `selectRequestedMeetings` once the caller has the week's own meeting rows
- * in hand.
+ * fields. Malformed values are rejected rather than coerced: a non-boolean
+ * `include_focus` (e.g. the string "false", which is truthy) or a
+ * non-array / non-string-entry `meeting_ids` would otherwise silently flip
+ * the caller's intent or broaden a targeted draft to the whole week.
+ * Duplicate meeting ids are collapsed so a repeated id can't weight the
+ * draft toward one meeting's transcript. The actual ownership/week check
+ * happens in `selectRequestedMeetings` once the caller has the week's own
+ * meeting rows in hand.
  */
-export function parseDraftSourceSelection(payload: unknown): DraftSourceSelection {
+export function parseDraftSourceSelection(payload: unknown): ParsedDraftSourceSelection {
   const p = (payload ?? {}) as Record<string, unknown>;
-  const includeFocus = p.include_focus === undefined ? true : !!p.include_focus;
-  const meetingIds = Array.isArray(p.meeting_ids)
-    ? p.meeting_ids.filter((id): id is string => typeof id === 'string')
-    : null;
-  return { includeFocus, meetingIds };
+
+  let includeFocus = true;
+  if (p.include_focus !== undefined) {
+    if (typeof p.include_focus !== 'boolean') {
+      return { valid: false, error: 'include_focus must be true or false.' };
+    }
+    includeFocus = p.include_focus;
+  }
+
+  let meetingIds: string[] | null = null;
+  if (p.meeting_ids !== undefined) {
+    if (
+      !Array.isArray(p.meeting_ids) ||
+      p.meeting_ids.some((id) => typeof id !== 'string')
+    ) {
+      return { valid: false, error: 'meeting_ids must be an array of meeting ids.' };
+    }
+    meetingIds = [...new Set(p.meeting_ids as string[])];
+  }
+
+  return { valid: true, selection: { includeFocus, meetingIds } };
 }
 
 /**
