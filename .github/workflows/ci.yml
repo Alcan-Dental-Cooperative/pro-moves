@@ -3,6 +3,12 @@ name: CI
 on:
   pull_request:
     branches: [main]
+  # main was never checked: CI only ran on the way in, so anything that reached
+  # main outside a PR went unlinted and the next PR to open inherited the red.
+  # That is how the prefer-const error in previewAuthStorage landed on #118,
+  # a config-only PR touching nothing in src/.
+  push:
+    branches: [main]
 
 jobs:
   check:
