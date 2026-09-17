@@ -75,6 +75,35 @@ export function useLeadWeekBlasts() {
       toast({ title: "Couldn't save the draft", description: e?.message ?? 'Please try again.', variant: 'destructive' }),
   });
 
+  /**
+   * LRM-11: discards a draft outright (unlike updateBlastBody, which edits
+   * one in place). Meaningful now that a new draft can follow -- see the
+   * DB's one-open-draft-at-a-time partial unique index. Draft-only, same
+   * seatbelt as updateBlastBody: a stale tab that lost a send race matches
+   * zero rows instead of deleting the now-sent record. RLS also scopes
+   * deletes to the author's own rows (the LRM-2 migration's USING clause
+   * applies to DELETE and checks created_by = the caller's staff id, with
+   * no additional training-authority requirement the way INSERT/UPDATE's
+   * WITH CHECK has), so this can't reach anyone else's blast either way.
+   */
+  const deleteDraft = useMutation({
+    mutationFn: async (id: string) => {
+      const { data, error } = await sb
+        .from('lead_week_blasts')
+        .delete()
+        .eq('id', id)
+        .eq('status', 'draft')
+        .select('id');
+      if (error) throw error;
+      if (!data || data.length === 0) {
+        throw new Error('This draft could not be found, or it was already sent.');
+      }
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: KEY }),
+    onError: (e: any) =>
+      toast({ title: "Couldn't discard the draft", description: e?.message ?? 'Please try again.', variant: 'destructive' }),
+  });
+
   /** Calls the lead-week-blast edge function's "draft" action. Does not write to the DB -- the caller saves the returned body/subject. */
   const generateDraft = useMutation({
     mutationFn: async (weekStartDate: string): Promise<{ body: string; subject: string }> => {
@@ -161,6 +190,7 @@ export function useLeadWeekBlasts() {
     orgId,
     createBlast,
     updateBlastBody,
+    deleteDraft,
     generateDraft,
     polishDraft,
     fetchRecipients,
