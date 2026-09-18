@@ -258,9 +258,9 @@ async function handleDraft(admin: ReturnType<typeof createClient>, callerStaff: 
   const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
   if (!OPENAI_API_KEY) throw new Error('OPENAI_API_KEY is not configured');
 
-  // LRM-13: the fixed template's literal wrapper text ("Hey there! This
-  // week's Lead RDA Focus is:", "At this week's Lead RDA meeting, we
-  // discussed:") is emitted deterministically in code by buildBlastBody,
+  // LRM-13: the fixed template's literal wrapper text (the "Hey there!"
+  // greeting, the <strong> section headers, the "Have a great week!"
+  // sign-off) is emitted deterministically in code by buildBlastBody,
   // never trusted to the model. The model is asked for exactly the two
   // variable pieces this draft needs, each in its own delimited section, so
   // its response can be parsed back apart rather than used as the whole
@@ -452,9 +452,14 @@ not to write new content.
 - No em dashes anywhere in the output.
 - Do not ADD a new greeting line ("Dear Doctors," or similar) or a
   signature/sign-off ("Best," "Thank you," or similar) that is not already
-  in the input. LRM-13 exception: if the input already opens with "Hey
-  there!" (the fixed template's opener), KEEP it exactly as the first line
-  -- do not strip it, reword it, or treat it as a banned greeting.
+  in the input. LRM-13 exception: the fixed template opens with "Hey
+  there!" and closes with "Have a great week!" -- if either is already in
+  the input, KEEP it exactly where it is (opener as the first line,
+  sign-off as the last) -- do not strip, reword, or treat them as banned.
+- The input may already be organized under short bolded section header
+  lines (e.g. <strong>This week's Lead RDA Focus</strong>). Keep those
+  headers and the content grouped under them -- reorganizing under new
+  headers of your own is a failure.
 
 ${HTML_OUTPUT_RULES}
 

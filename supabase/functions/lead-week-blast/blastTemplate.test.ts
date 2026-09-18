@@ -13,36 +13,46 @@ import {
 } from './blastTemplate';
 
 describe('buildBlastBody', () => {
-  it('emits the fixed opener and focus block as its own <p> when a focus sentence is given', () => {
+  it('wraps a focus-only draft in the greeting, headed focus block, and sign-off', () => {
     const body = buildBlastBody({ focusSentence: 'Greet every patient by name at check-in.', meetingSummaryHtml: null });
-    expect(body).toBe("<p>Hey there! This week's Lead RDA Focus is: Greet every patient by name at check-in.</p>");
+    expect(body).toBe(
+      '<p>Hey there!</p>' +
+      "<p><strong>This week's Lead RDA Focus</strong><br>Greet every patient by name at check-in.</p>" +
+      '<p>Have a great week!</p>',
+    );
   });
 
-  it('emits the fixed meetings line followed by the meeting summary list', () => {
+  it('emits the meetings header <p> followed by the meeting summary list', () => {
     const body = buildBlastBody({ focusSentence: null, meetingSummaryHtml: '<ul><li>Reviewed charting workflow</li></ul>' });
-    expect(body).toBe("<p>At this week's Lead RDA meeting, we discussed:</p><ul><li>Reviewed charting workflow</li></ul>");
+    expect(body).toBe(
+      '<p>Hey there!</p>' +
+      "<p><strong>From this week's Lead RDA meeting</strong></p><ul><li>Reviewed charting workflow</li></ul>" +
+      '<p>Have a great week!</p>',
+    );
   });
 
-  it('puts the focus block first, as its own contiguous unit, ahead of the meetings section', () => {
+  it('puts the focus block first, as its own contiguous <p>, ahead of the meetings section', () => {
     const body = buildBlastBody({
       focusSentence: 'Keep every chart note complete before checkout.',
       meetingSummaryHtml: '<ul><li>Discussed the new intake form</li></ul>',
     });
     expect(body).toBe(
-      "<p>Hey there! This week's Lead RDA Focus is: Keep every chart note complete before checkout.</p>" +
-      "<p>At this week's Lead RDA meeting, we discussed:</p><ul><li>Discussed the new intake form</li></ul>",
+      '<p>Hey there!</p>' +
+      "<p><strong>This week's Lead RDA Focus</strong><br>Keep every chart note complete before checkout.</p>" +
+      "<p><strong>From this week's Lead RDA meeting</strong></p><ul><li>Discussed the new intake form</li></ul>" +
+      '<p>Have a great week!</p>',
     );
   });
 
   it('omits the focus block entirely (no placeholder) when there is no focus sentence', () => {
     const body = buildBlastBody({ focusSentence: null, meetingSummaryHtml: '<ul><li>Something</li></ul>' });
     expect(body).not.toContain('Focus');
-    expect(body.startsWith("<p>At this week's Lead RDA meeting")).toBe(true);
+    expect(body.startsWith("<p>Hey there!</p><p><strong>From this week's Lead RDA meeting")).toBe(true);
   });
 
   it('omits the meetings block entirely (no placeholder) when there is no meeting summary', () => {
     const body = buildBlastBody({ focusSentence: 'Answer the phone within three rings.', meetingSummaryHtml: null });
-    expect(body).not.toContain('we discussed');
+    expect(body).not.toContain('Lead RDA meeting');
   });
 
   it('treats a whitespace-only focus sentence the same as null', () => {
@@ -52,16 +62,16 @@ describe('buildBlastBody', () => {
 
   it('treats a whitespace-only meeting summary the same as null', () => {
     const body = buildBlastBody({ focusSentence: 'Smile at every patient.', meetingSummaryHtml: '  ' });
-    expect(body).not.toContain('we discussed');
+    expect(body).not.toContain('Lead RDA meeting');
   });
 
-  it('returns an empty string when both parts are absent', () => {
+  it('returns an empty string (no greeting-only shell) when both parts are absent', () => {
     expect(buildBlastBody({ focusSentence: null, meetingSummaryHtml: null })).toBe('');
   });
 
   it('HTML-escapes the focus sentence so a stray < or & from the model cannot break the wrapping <p>', () => {
     const body = buildBlastBody({ focusSentence: 'Chart & verify <before> checkout', meetingSummaryHtml: null });
-    expect(body).toBe("<p>Hey there! This week's Lead RDA Focus is: Chart &amp; verify &lt;before&gt; checkout</p>");
+    expect(body).toContain("<strong>This week's Lead RDA Focus</strong><br>Chart &amp; verify &lt;before&gt; checkout</p>");
   });
 });
 

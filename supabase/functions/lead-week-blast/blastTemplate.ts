@@ -1,12 +1,16 @@
 // LRM-13: pure template assembly for the "Summarize meeting" draft output.
 // The composer used to trust the model to reproduce the fixed opener and
 // section lines verbatim inside a single freeform response; this instead
-// keeps the literal English -- "Hey there! This week's Lead RDA Focus is:"
-// and "At this week's Lead RDA meeting, we discussed:" -- in code, so it can
-// never drift, go missing, or get reworded by the model. The model supplies
-// only the two variable pieces: the focus rephrased into one plain-language
-// aspirational sentence, and the meeting summary as an HTML bullet list. See
+// keeps the literal English in code, so it can never drift, go missing, or
+// get reworded by the model. The model supplies only the two variable
+// pieces: the focus rephrased into one plain-language aspirational sentence,
+// and the meeting summary as an HTML bullet list. See
 // docs/specs/lrm-13-composer-first.md, decision 3 and 4.
+//
+// Template shape (John's live-test amendment, 2026-09-18): the draft must
+// read as ready-to-send, not a rough draft -- greeting on its own line, each
+// section under a short <strong> header, and a fixed sign-off, instead of
+// the original single run-on paragraph.
 
 export interface BlastTemplateParts {
   /**
@@ -36,27 +40,33 @@ function escapeHtml(text: string): string {
 
 /**
  * Assembles the fixed template around the model-supplied content. The focus
- * block, when present, is always its own single `<p>` -- a contiguous unit
- * at the top of the body, distinct from the meeting summary below it, so it
- * can be selected and deleted in one gesture without touching the rest
- * (decision 3). When there is no focus, the body opens directly with the
- * meetings line. When there are no meetings, that section is simply absent
- * -- never a placeholder like "(no meetings this week)".
+ * block, when present, is always its own single `<p>` (header + `<br>` +
+ * sentence) -- a contiguous unit at the top of the body, distinct from the
+ * meeting summary below it, so it can be selected and deleted in one gesture
+ * without touching the rest (decision 3). A section with no content is
+ * simply absent -- never a placeholder like "(no meetings this week)". The
+ * greeting and sign-off wrap whichever sections exist; when BOTH parts are
+ * absent the result is an empty string (callers guarantee at least one
+ * section before drafting, so an all-empty body is "no draft", not a
+ * greeting-only shell).
  */
 export function buildBlastBody(parts: BlastTemplateParts): string {
-  const sections: string[] = [];
-
   const focusSentence = parts.focusSentence?.trim();
+  const meetingSummaryHtml = parts.meetingSummaryHtml?.trim();
+  if (!focusSentence && !meetingSummaryHtml) return '';
+
+  const sections: string[] = ['<p>Hey there!</p>'];
+
   if (focusSentence) {
-    sections.push(`<p>Hey there! This week's Lead RDA Focus is: ${escapeHtml(focusSentence)}</p>`);
+    sections.push(`<p><strong>This week's Lead RDA Focus</strong><br>${escapeHtml(focusSentence)}</p>`);
   }
 
-  const meetingSummaryHtml = parts.meetingSummaryHtml?.trim();
   if (meetingSummaryHtml) {
-    sections.push(`<p>At this week's Lead RDA meeting, we discussed:</p>`);
+    sections.push(`<p><strong>From this week's Lead RDA meeting</strong></p>`);
     sections.push(meetingSummaryHtml);
   }
 
+  sections.push('<p>Have a great week!</p>');
   return sections.join('');
 }
 

@@ -92,8 +92,11 @@ export function MeetingsAndFocusTab() {
   // builder (focus slot)
   const [builderOpen, setBuilderOpen] = useState(false);
   const [items, setItems] = useState<BuilderItem[]>([]);
+  // Live-test 2026-09-18: the framing-note field was cut from the Builder UI
+  // (it was unclear what anyone was supposed to do with it). The state stays
+  // as a read-only pass-through so re-scheduling a week that already has a
+  // saved framing note preserves it instead of silently wiping it.
   const [framing, setFraming] = useState('');
-  const [own, setOwn] = useState('');
   // Snapshot of what the Builder loaded with, so navigation can tell whether
   // there are unsaved edits worth confirming before discarding (B3).
   const [builderSnapshot, setBuilderSnapshot] = useState<{ items: { text: string; sourceId: string | null }[]; framing: string } | null>(null);
@@ -122,10 +125,10 @@ export function MeetingsAndFocusTab() {
     setBuilderSnapshot({ items: initialItems.map((it) => ({ text: it.text, sourceId: it.sourceId })), framing: w?.framing ?? '' });
     setBuilderOpen(true);
   };
-  const closeBuilder = () => { setBuilderOpen(false); setItems([]); setFraming(''); setOwn(''); setBuilderSnapshot(null); };
+  const closeBuilder = () => { setBuilderOpen(false); setItems([]); setFraming(''); setBuilderSnapshot(null); };
 
   const isBuilderEditDirty = builderOpen && !!builderSnapshot && isBuilderDirty(
-    { items: items.map((it) => ({ text: it.text, sourceId: it.sourceId })), framing, ownDraft: own },
+    { items: items.map((it) => ({ text: it.text, sourceId: it.sourceId })), framing },
     builderSnapshot,
   );
 
@@ -144,11 +147,12 @@ export function MeetingsAndFocusTab() {
     if (items.length >= 2) return;
     setItems((p) => [...p, { key: nextKey(), text: issue.title, sourceId: issue.id, sourceTitle: issue.title }]);
   };
-  const addOwn = () => {
-    if (items.length >= 2) { toast({ title: 'Two is the cap' }); return; }
-    if (!own.trim()) return;
-    setItems((p) => [...p, { key: nextKey(), text: own.trim(), sourceId: null, sourceTitle: null }]);
-    setOwn('');
+  // Live-test 2026-09-18: "write your own" moved from a separate input on
+  // the right panel into the focus slots themselves -- clicking the empty
+  // slot opens a blank item that is edited in place, same as any other item.
+  const addOwnBlank = () => {
+    if (items.length >= 2) return;
+    setItems((p) => [...p, { key: nextKey(), text: '', sourceId: null, sourceTitle: null }]);
   };
   const editItem = (key: string, text: string) => setItems((p) => p.map((i) => (i.key === key ? { ...i, text, aiPolished: false } : i)));
   const removeItem = (key: string) => setItems((p) => p.filter((i) => i.key !== key));
@@ -170,12 +174,15 @@ export function MeetingsAndFocusTab() {
   };
 
   const schedule = () => {
-    if (!items.length) { toast({ title: 'Add at least one focus first' }); return; }
+    // A blank write-your-own slot that was never filled in is dropped, not
+    // scheduled as an empty focus.
+    const filled = items.filter((i) => i.text.trim());
+    if (!filled.length) { toast({ title: 'Add at least one focus first' }); return; }
     publishWeek.mutate(
-      { weekStart: selectedMonday, framing, items: items.map((i) => ({ text: i.text.trim(), source_issue_id: i.sourceId })) },
+      { weekStart: selectedMonday, framing, items: filled.map((i) => ({ text: i.text.trim(), source_issue_id: i.sourceId })) },
       { onSuccess: () => {
           const live = when === 'current';
-          const moved = items.filter((i) => i.sourceId).length;
+          const moved = filled.filter((i) => i.sourceId).length;
           closeBuilder();
           toast({ title: `Scheduled for ${fmtShort(selectedMonday)}` + (live ? ' · live on lead homes' : ' · planned ahead') + (moved ? ` · ${moved} issue${moved > 1 ? 's' : ''} → Communicated` : '') });
         } },
@@ -268,10 +275,10 @@ export function MeetingsAndFocusTab() {
           <SlotSection num={1} title="Focus" state={focusState} id="slot-focus"
             hideBadge={shouldHideEmptyBadge(when, focusState === 'not_started')}>
             {builderOpen ? (
-              <Builder weekLabel={fmtWeek(selectedMonday)} when={when} items={items} framing={framing} own={own}
+              <Builder weekLabel={fmtWeek(selectedMonday)} when={when} items={items}
                 availIssues={availIssues} publishing={publishWeek.isPending}
-                onOwn={setOwn} onAddOwn={addOwn} onAddIssue={addIssue} onEdit={editItem} onRemove={removeItem}
-                onPolish={polishItem} onFraming={setFraming} onSchedule={schedule} onCancel={closeBuilder} />
+                onAddBlank={addOwnBlank} onAddIssue={addIssue} onEdit={editItem} onRemove={removeItem}
+                onPolish={polishItem} onSchedule={schedule} onCancel={closeBuilder} />
             ) : (
               <SelectedWeek week={selected} when={when} monday={selectedMonday} onBuild={() => openBuilder(selectedMonday)} />
             )}
@@ -965,7 +972,11 @@ function BlastSlot({
             onBlur={flushSave}
             modules={BLAST_QUILL_MODULES}
             placeholder="Write the blast body here…"
-            className="bg-background rounded-md [&_.ql-editor]:min-h-[220px]"
+            // The >*+* margin restores the paragraph spacing Quill's own CSS
+            // zeroes out, so the composer previews roughly what an email
+            // client's default <p>/<ul> margins will render (live-test
+            // 2026-09-18: the draft read as one cramped block on screen).
+            className="bg-background rounded-md [&_.ql-editor]:min-h-[220px] [&_.ql-editor>*+*]:mt-3"
           />
           <div className="flex flex-wrap items-center gap-2">
             {/* LRM-13: Discard relocated here -- visible without scrolling
@@ -1302,7 +1313,6 @@ function SelectedWeek({ week, when, monday, onBuild }: { week: HydratedFocusWeek
           {live && <span className="inline-flex items-center gap-1.5 text-2xs font-bold text-[color:var(--domain-clinical,#0E7C86)]">● live on lead homes</span>}
         </div>
         {week.items.map((it, i) => <FocusRow key={it.id} idx={i} text={it.text} outcome={when === 'past' ? it.outcome : undefined} />)}
-        {week.framing && <p className="mt-2.5 text-sm italic text-muted-foreground">“{week.framing}”</p>}
         {when !== 'past' && <Button variant="outline" size="sm" className="mt-3" onClick={onBuild}>Edit</Button>}
       </div>
     );
@@ -1334,9 +1344,9 @@ function FocusRow({ idx, text, outcome }: { idx: number; text: string; outcome?:
 }
 
 function Builder(props: {
-  weekLabel: string; when: WeekWhen; items: BuilderItem[]; framing: string; own: string; availIssues: CoachingIssue[]; publishing: boolean;
-  onOwn: (v: string) => void; onAddOwn: () => void; onAddIssue: (i: CoachingIssue) => void; onEdit: (k: string, v: string) => void; onRemove: (k: string) => void;
-  onPolish: (k: string) => void; onFraming: (v: string) => void; onSchedule: () => void; onCancel: () => void;
+  weekLabel: string; when: WeekWhen; items: BuilderItem[]; availIssues: CoachingIssue[]; publishing: boolean;
+  onAddBlank: () => void; onAddIssue: (i: CoachingIssue) => void; onEdit: (k: string, v: string) => void; onRemove: (k: string) => void;
+  onPolish: (k: string) => void; onSchedule: () => void; onCancel: () => void;
 }) {
   const { items, availIssues, when } = props;
   const live = when === 'current';
@@ -1355,13 +1365,24 @@ function Builder(props: {
           </div>
           {[0, 1].map((n) => {
             const it = items[n];
-            if (!it) return <div key={n} className="mb-3 rounded-xl border border-dashed p-3.5 text-xs text-muted-foreground">Add an issue from the right, or write your own.</div>;
+            if (!it) {
+              // Only the next open slot renders (as the write-your-own entry
+              // point); a second empty slot would just be a dead placeholder.
+              if (n > items.length) return null;
+              return (
+                <button key={n} type="button" onClick={props.onAddBlank}
+                  className="mb-3 block w-full rounded-xl border border-dashed p-3.5 text-left text-xs text-muted-foreground transition-colors hover:border-solid hover:bg-muted/40">
+                  Pull an issue from the right, or click here to write your own.
+                </button>
+              );
+            }
             return (
               <div key={it.key} className="mb-3 rounded-xl border p-3">
                 <div className="flex items-start gap-2.5">
                   <span className="mt-0.5 grid h-[22px] w-[22px] flex-none place-items-center rounded-full bg-muted text-xs font-bold text-muted-foreground">{n + 1}</span>
                   <div className="flex-1">
-                    <Textarea value={it.text} onChange={(e) => props.onEdit(it.key, e.target.value)} rows={2} className="font-semibold" />
+                    <Textarea value={it.text} onChange={(e) => props.onEdit(it.key, e.target.value)} rows={2} className="font-semibold"
+                      autoFocus={!it.text && !it.sourceId} placeholder="Write this week's focus…" />
                     <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
                       <div className="flex flex-wrap items-center gap-1.5">
                         <span className="rounded-full border bg-background px-2 py-0.5 text-2xs font-semibold text-muted-foreground">{it.sourceTitle ? `from: ${it.sourceTitle.slice(0, 24)}${it.sourceTitle.length > 24 ? '…' : ''}` : 'written by you'}</span>
@@ -1379,10 +1400,7 @@ function Builder(props: {
               </div>
             );
           })}
-          <div className="my-4 h-px bg-border" />
-          <div className="mb-1.5 text-2xs font-semibold uppercase tracking-wider text-muted-foreground">Framing note <span className="font-normal normal-case tracking-normal">(optional)</span></div>
-          <Textarea value={props.framing} onChange={(e) => props.onFraming(e.target.value)} rows={2} placeholder="e.g. Two small things this week, both about starting strong with the family." />
-          <Button className="mt-3.5" disabled={props.publishing || !items.length} onClick={props.onSchedule}>
+          <Button className="mt-1" disabled={props.publishing || !items.some((i) => i.text.trim())} onClick={props.onSchedule}>
             {props.publishing ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Scheduling…</> : 'Schedule this week →'}
           </Button>
           <p className="mt-2.5 rounded-lg border border-dashed bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
@@ -1393,10 +1411,6 @@ function Builder(props: {
         <div className="self-start rounded-xl border p-3.5">
           <h3 className="text-sm font-bold">Pull from your issues</h3>
           <p className="mb-3 mt-0.5 text-xs text-muted-foreground">Click <b>+ Focus</b> to promote one. Declaring moves it to Communicated.</p>
-          <div className="mb-3.5 flex gap-2">
-            <Input value={props.own} onChange={(e) => props.onOwn(e.target.value)} placeholder="Or write your own…" onKeyDown={(e) => { if (e.key === 'Enter') props.onAddOwn(); }} />
-            <Button variant="outline" size="sm" onClick={props.onAddOwn}>Add</Button>
-          </div>
           {availIssues.length === 0 ? (
             <div className="rounded-lg border border-dashed py-6 text-center text-xs text-muted-foreground">No open issues to pull.</div>
           ) : availIssues.map((iss) => (
