@@ -28,19 +28,31 @@ docs/specs/lrm-11-multi-blast-week.md.
   the Lovable branch preview (stop at the send confirm, never complete
   a real Send; Test send is the safe path), merge, switch Lovable to
   main, Publish.
-- Then: /spec the composer-first adjustment (LRM-13, John described it
-  2026-09-18, direction agreed): "Draft blast" opens a BLANK composer
-  instead of auto-generating; she writes herself, or clicks a
-  "Summarize meeting" button that opens the source modal (default to
-  the single meeting when only one exists). Polish unchanged. Plus an
-  optional title on lead_meetings (nullable column, additive), with
-  picker/meeting labels as day abbreviation + date + title ("Fri 9/14 ·
-  Meeting with Jenny"). Spec must decide: summarize-into-nonempty-
-  editor behavior (John leans append, never silent replace, per the
-  PR #116 incident) and whether focus stays a source in the same modal
-  (lean yes). Note: Ariyana declined meeting titles on 2026-09-14;
-  John reverses that because the picker needs disambiguation. Mention
-  it to her; keep the title optional.
+- Then: /spec LRM-13 composer-first (John locked the direction
+  2026-09-18, second pass):
+  1. "Draft blast" opens a BLANK composer, no auto-generation. She
+     writes herself, or clicks "Summarize meeting".
+  2. Summarize opens a MEETINGS-ONLY modal (no focus checkbox; default
+     to the single meeting when only one exists). If the editor already
+     has text: confirm dialog "this will replace your text", then
+     REPLACE. Never append (John decided; overrides earlier lean).
+  3. Focus is ALWAYS part of the summary output, not a source option:
+     fixed template opens "Hey there! This week's Lead RDA Focus is:
+     {focus rephrased as complete plain-language aspirational
+     statement}", then "At this week's Lead RDA meeting, we discussed:
+     {bulleted summary of checked meetings}". Positioned so she can
+     delete the focus block easily in one-off weeks.
+  4. Two DELIBERATE prompt-rule reversals to state in the spec: the
+     greeting ban is lifted for this fixed template opener, and focus
+     items are REPHRASED (aspirational restatement), no longer quoted
+     verbatim.
+  5. Save draft button removed; debounced auto-save (save on idle +
+     blur). The PR #116 persist-before-send guarantee stays regardless.
+  6. Optional title on lead_meetings (nullable, additive migration);
+     labels day abbrev + date + title ("Fri 9/14 · Meeting with
+     Jenny"). Reverses Ariyana's 2026-09-14 decline (picker needs
+     disambiguation); keep optional, mention to her.
+  Polish unchanged. Builds on top of merged PR #123.
 - If John reports a script failure on #123, open a fix branch off
   feature/lrm-12-multi-blast-ui scope, not a rebuild.
 
