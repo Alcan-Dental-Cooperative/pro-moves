@@ -24,12 +24,24 @@ docs/specs/lrm-11-multi-blast-week.md.
   merged; /status will sync it to stage:merged).
 
 ## Next
-- Nothing to build. Waiting on John: review PR #123, walk the 8-step
-  acceptance script on the Lovable branch preview (stop at the send
-  confirm, never complete a real Send; Test send is the safe path),
-  merge, switch Lovable to main, Publish. Then collect Ariyana's
-  first-use feedback.
-- If John reports a script failure, open a fix branch off
+- Waiting on John: review PR #123, walk the 8-step acceptance script on
+  the Lovable branch preview (stop at the send confirm, never complete
+  a real Send; Test send is the safe path), merge, switch Lovable to
+  main, Publish.
+- Then: /spec the composer-first adjustment (LRM-13, John described it
+  2026-09-18, direction agreed): "Draft blast" opens a BLANK composer
+  instead of auto-generating; she writes herself, or clicks a
+  "Summarize meeting" button that opens the source modal (default to
+  the single meeting when only one exists). Polish unchanged. Plus an
+  optional title on lead_meetings (nullable column, additive), with
+  picker/meeting labels as day abbreviation + date + title ("Fri 9/14 ·
+  Meeting with Jenny"). Spec must decide: summarize-into-nonempty-
+  editor behavior (John leans append, never silent replace, per the
+  PR #116 incident) and whether focus stays a source in the same modal
+  (lean yes). Note: Ariyana declined meeting titles on 2026-09-14;
+  John reverses that because the picker needs disambiguation. Mention
+  it to her; keep the title optional.
+- If John reports a script failure on #123, open a fix branch off
   feature/lrm-12-multi-blast-ui scope, not a rebuild.
 
 ## Files that matter
