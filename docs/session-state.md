@@ -1,63 +1,49 @@
-# Session state — 2026-09-18
+# Session state — 2026-09-18 (refreshed 09-18, post PR #123 merge)
 
 ## The job
-Build and ship the multiple-blasts-per-week feature: LRM-11 (backend) and
-LRM-12 (UI), both from the approved spec at
-docs/specs/lrm-11-multi-blast-week.md.
+Build and ship LRM-13, the composer-first blast editor, from the approved
+spec at docs/specs/lrm-13-composer-first.md. LRM-11 and LRM-12 (multiple
+blasts per week) are done and live.
 
 ## Done
-- LRM-11 built, QA PASS, PR #122 merged by John. Backend is fully LIVE:
-  migration 20260917160000 applied to prod (verified: week unique
-  constraint gone, one-open-draft partial index in place) and
-  lead-week-blast edge function v10 deployed via Supabase MCP.
-- LRM-12 built on feature/lrm-12-multi-blast-ui, fresh-eyes QA PASS,
-  PR #123 open and awaiting John's Gate 2 (merge + Lovable Publish).
-  All five spec items: blast stack + New blast button, source picker,
-  discard draft, "2 sent" badge / list-aware month view, Select all/none
-  recipients with live-count confirm copy.
-- QA fixes applied on both branches before shipping: LRM-11 malformed
-  payloads now 400 instead of coercing; LRM-12 got a synchronous ref
-  guard against double-click double-draft and a neutral stale-draft
-  message ("sent or discarded").
-- Motion tickets: LRM-11 tk_LdZD7MGpr55WMfdv5gugpk and LRM-12
-  tk_azGFnf7UCeGoGiXP7vRmJA both at stage:ready-to-review (LRM-11 is
-  merged; /status will sync it to stage:merged).
+- LRM-11 (backend) shipped and LIVE: PR #122 merged, migration
+  20260917160000 applied to prod, lead-week-blast edge function at v10.
+- LRM-12 (UI) shipped: PR #123 merged 2026-09-18, John walked the
+  acceptance script, Lovable published. Multi-blast-per-week is live for
+  Ariyana end to end.
+- LRM-13 spec written and APPROVED at Gate 1 (John, 2026-09-18):
+  docs/specs/lrm-13-composer-first.md. Blank composer, meetings-only
+  summarize modal with warn-and-replace, fixed focus-first template,
+  autosave with a dirty-state indicator, optional meeting titles,
+  relocated Discard.
+- LRM-13 build steps 1 and 2 are COMMITTED ONLY on
+  feature/lrm-13-composer-first, not yet live:
+  - 20260918093000_lrm13_meeting_title.sql (additive nullable title)
+    written but NOT applied to prod (verified 2026-09-18: the column
+    does not exist yet).
+  - blastTemplate.ts + tests + index.ts prompt rewrite committed, but
+    the deployed function is still v10, i.e. NOT redeployed.
 
 ## Next
-- Waiting on John: review PR #123, walk the 8-step acceptance script on
-  the Lovable branch preview (stop at the send confirm, never complete
-  a real Send; Test send is the safe path), merge, switch Lovable to
-  main, Publish.
-- Then: /spec LRM-13 composer-first (John locked the direction
-  2026-09-18, second pass):
-  1. "Draft blast" opens a BLANK composer, no auto-generation. She
-     writes herself, or clicks "Summarize meeting".
-  2. Summarize opens a MEETINGS-ONLY modal (no focus checkbox; default
-     to the single meeting when only one exists). If the editor already
-     has text: confirm dialog "this will replace your text", then
-     REPLACE. Never append (John decided; overrides earlier lean).
-  3. Focus is ALWAYS part of the summary output, not a source option:
-     fixed template opens "Hey there! This week's Lead RDA Focus is:
-     {focus rephrased as complete plain-language aspirational
-     statement}", then "At this week's Lead RDA meeting, we discussed:
-     {bulleted summary of checked meetings}". Positioned so she can
-     delete the focus block easily in one-off weeks.
-  4. Two DELIBERATE prompt-rule reversals to state in the spec: the
-     greeting ban is lifted for this fixed template opener, and focus
-     items are REPHRASED (aspirational restatement), no longer quoted
-     verbatim.
-  5. Save draft button removed; debounced auto-save (save on idle +
-     blur). The PR #116 persist-before-send guarantee stays regardless.
-  6. Optional title on lead_meetings (nullable, additive migration);
-     labels day abbrev + date + title ("Fri 9/14 · Meeting with
-     Jenny"). Reverses Ariyana's 2026-09-14 decline (picker needs
-     disambiguation); keep optional, mention to her.
-  Polish unchanged. Builds on top of merged PR #123.
-- If John reports a script failure on #123, open a fix branch off
-  feature/lrm-12-multi-blast-ui scope, not a rebuild.
+1. Apply the LRM-13 migration to prod (Supabase SQL editor, idempotent
+   ADD COLUMN IF NOT EXISTS). Additive and safe ahead of the frontend.
+2. Redeploy lead-week-blast via Supabase MCP deploy_edge_function
+   (index.ts + blastTemplate.ts + draftValidation.ts + htmlUtils.ts,
+   verify_jwt true). Backward compatible with the live UI.
+3. Build step 3, the UI: blank-composer flow, summarize modal,
+   debounced autosave + save-state indicator, title field on the
+   meeting form, new day-abbrev labels, Discard relocation. All in
+   src/pages/training/MeetingsAndFocusTab.tsx.
+4. QA (no gate between build and QA), then PR, then John's Gate 2:
+   the 7-step acceptance script in the spec, merge, Lovable Publish.
+- Housekeeping: rebase feature/lrm-13-composer-first on main first;
+  main moved ahead with PR #124 (PWA install tracking).
 
 ## Files that matter
-`docs/specs/lrm-11-multi-blast-week.md` — the approved spec for both tickets, incl. acceptance script
+`docs/specs/lrm-13-composer-first.md` — the live spec: decisions, build order, acceptance script
+`supabase/functions/lead-week-blast/blastTemplate.ts` — new fixed template (committed, not deployed)
+`supabase/migrations/20260918093000_lrm13_meeting_title.sql` — written, NOT yet applied to prod
+`docs/specs/lrm-11-multi-blast-week.md` — shipped slot model LRM-13 builds on
 `src/pages/training/MeetingsAndFocusTab.tsx` — all LRM-12 UI lives here (stack, picker, discard, recipient dialog)
 `src/lib/leadWeekBlastSources.ts` — source picker pure state (new in LRM-12)
 `src/lib/leadWeekBlasts.ts` — list-based slot state, countSentBlasts, badge labels
@@ -66,13 +52,11 @@ docs/specs/lrm-11-multi-blast-week.md.
 `supabase/migrations/20260917160000_lrm11_multi_blast_week.sql` — applied to prod already, do not re-apply
 
 ## Open questions
-- None for building. John's live checks that code QA could not do:
-  fast double-click the picker's Draft button (must not create two
-  drafts), and the discard-during-send window's toast copy.
+- None for building. LRM-13 direction is locked in the spec.
 
 ## Do not re-derive
-- The LRM-11 backend is LIVE in prod and invisible until PR #123
-  publishes. Do not re-apply the migration or redeploy the function.
+- LRM-11/12 are fully live. Do not re-apply 20260917160000 or rebuild
+  the slot model. The LRM-13 migration, by contrast, is NOT applied yet.
 - Kit gates clarified 2026-09-17: only two human gates (spec approval,
   merge). Roll /build straight into /qa without asking John.
 - supabase CLI function deploy is permission-blocked in this harness;
