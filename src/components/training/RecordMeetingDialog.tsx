@@ -40,6 +40,7 @@ export function RecordMeetingDialog({
   open, onOpenChange, mode, meeting, weekStart, locations, onCreate, onUpdateSummary, onAddIssue, creating, updating,
 }: Props) {
   const [dateDisplay, setDateDisplay] = useState(formatDateForDisplay(weekStart));
+  const [title, setTitle] = useState('');
   const [transcript, setTranscript] = useState('');
   const [summary, setSummary] = useState('');
   const [generating, setGenerating] = useState(false);
@@ -49,10 +50,12 @@ export function RecordMeetingDialog({
     if (!open) return;
     if (mode === 'view' && meeting) {
       setDateDisplay(formatDateForDisplay(meeting.meeting_date));
+      setTitle(meeting.title ?? '');
       setTranscript(meeting.raw_transcript ?? '');
       setSummary(meeting.internal_summary ?? '');
     } else {
       setDateDisplay(formatDateForDisplay(weekStart));
+      setTitle('');
       setTranscript('');
       setSummary('');
     }
@@ -94,13 +97,14 @@ export function RecordMeetingDialog({
       weekStartDate: deriveMeetingWeekStart(parsedDate),
       rawTranscript: transcript.trim(),
       internalSummary: summary.trim(),
+      title: title.trim() || null,
     });
     onOpenChange(false);
   };
 
   const saveSummaryEdit = () => {
     if (!meeting || !summary.trim()) return;
-    onUpdateSummary({ id: meeting.id, internalSummary: summary.trim() });
+    onUpdateSummary({ id: meeting.id, internalSummary: summary.trim(), title: title.trim() || null });
   };
 
   return (
@@ -137,6 +141,18 @@ export function RecordMeetingDialog({
           </div>
 
           <div>
+            <label className="mb-1.5 block text-[12.5px] font-semibold text-foreground/80">
+              Title <span className="font-normal normal-case tracking-normal text-muted-foreground">(optional)</span>
+            </label>
+            <Input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="e.g. Meeting with Jenny"
+              maxLength={80}
+            />
+          </div>
+
+          <div>
             <label className="mb-1.5 block text-[12.5px] font-semibold text-foreground/80">Transcript</label>
             {mode === 'create' ? (
               <Textarea
@@ -170,7 +186,7 @@ export function RecordMeetingDialog({
             />
             {mode === 'view' && (
               <Button variant="outline" size="sm" className="mt-2" disabled={updating || !summary.trim()} onClick={saveSummaryEdit}>
-                {updating ? <><Loader2 className="mr-1.5 h-4 w-4 animate-spin" />Saving…</> : 'Save summary'}
+                {updating ? <><Loader2 className="mr-1.5 h-4 w-4 animate-spin" />Saving…</> : 'Save'}
               </Button>
             )}
           </div>

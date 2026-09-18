@@ -20,7 +20,7 @@ function meeting(overrides: Partial<LeadMeetingRow> = {}): LeadMeetingRow {
   return {
     id: 'm1', organization_id: 'org1', created_by: 'staff1',
     meeting_date: '2026-08-11', week_start_date: '2026-08-10',
-    raw_transcript: null, internal_summary: null,
+    raw_transcript: null, internal_summary: null, title: null,
     created_at: '2026-08-11T12:00:00Z', updated_at: '2026-08-11T12:00:00Z',
     ...overrides,
   };

@@ -45,3 +45,24 @@ export const MIN_TRANSCRIPT_LENGTH = 20;
 export function isTranscriptLongEnough(transcript: string): boolean {
   return transcript.trim().length >= MIN_TRANSCRIPT_LENGTH;
 }
+
+/**
+ * LRM-13: the label shown for a meeting everywhere it appears (MeetingSlot,
+ * the "Summarize meeting" modal) -- day abbreviation + short date, plus an
+ * optional title: "Fri 9/14 · Meeting with Jenny", or just "Fri 9/14" for an
+ * untitled meeting (omit absent content, no placeholder -- see John's UI
+ * rule). Titles disambiguate same-day meetings, which the old date-only
+ * label ("09/14/2026") could not. `meetingDate` is a "YYYY-MM-DD" string;
+ * appending a midday local time (matching this file's sibling date helpers,
+ * e.g. MeetingsAndFocusTab.tsx's own `parse`) avoids the UTC-midnight
+ * off-by-one that a bare `new Date("YYYY-MM-DD")` produces in a
+ * negative-UTC-offset timezone.
+ */
+export function formatMeetingLabel(meetingDate: string, title: string | null | undefined): string {
+  const date = new Date(`${meetingDate}T12:00:00`);
+  const dayAbbrev = date.toLocaleDateString('en-US', { weekday: 'short' });
+  const shortDate = date.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' });
+  const base = `${dayAbbrev} ${shortDate}`;
+  const trimmedTitle = title?.trim();
+  return trimmedTitle ? `${base} · ${trimmedTitle}` : base;
+}

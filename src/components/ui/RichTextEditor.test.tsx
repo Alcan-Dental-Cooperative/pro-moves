@@ -316,6 +316,47 @@ describe('RichTextEditor', () => {
     expect(onReady.mock.calls[1][0]).toContain('Second');
   });
 
+  // LRM-13: the doctor-blast composer flushes its debounced autosave on
+  // blur, so it needs a "focus left the editor" signal distinct from every
+  // ordinary caret move / selection change that happens while the user is
+  // still working inside the editor.
+  it('fires onBlur when the editor loses focus, but not on mount or on an ordinary edit', async () => {
+    const onChange = vi.fn();
+    const onBlur = vi.fn();
+    const { container } = render(
+      <RichTextEditor value="<p>hello</p>" onChange={onChange} onBlur={onBlur} modules={{ toolbar: false }} />
+    );
+    const editor = await waitFor(() => {
+      const el = container.querySelector('.ql-editor') as HTMLElement | null;
+      expect(el).not.toBeNull();
+      return el as HTMLElement;
+    });
+    const instance = await findQuillInstance(editor);
+
+    instance.setText('typed content');
+    await waitFor(() => expect(onChange).toHaveBeenCalled());
+    expect(onBlur).not.toHaveBeenCalled();
+
+    instance.blur();
+    await waitFor(() => {
+      expect(onBlur).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it('does not require onBlur -- existing callers that omit it are unaffected', async () => {
+    const onChange = vi.fn();
+    const { container } = render(
+      <RichTextEditor value="<p>a</p>" onChange={onChange} modules={{ toolbar: false }} />
+    );
+    await waitFor(() => {
+      expect(container.querySelector('.ql-editor')).not.toBeNull();
+    });
+    const editor = container.querySelector('.ql-editor') as HTMLElement;
+    const instance = await findQuillInstance(editor);
+    // Must not throw when no onBlur was passed.
+    expect(() => instance.blur()).not.toThrow();
+  });
+
   it('does not require onReady -- existing callers that omit it are unaffected', async () => {
     const onChange = vi.fn();
     const { container } = render(

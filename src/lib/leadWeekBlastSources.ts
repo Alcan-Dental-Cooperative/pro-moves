@@ -1,58 +1,53 @@
-// LRM-12: pure selection-model logic for the draft source picker (the
-// checkboxes shown before a new draft, or a Regenerate, calls the edge
-// function). Kept separate from React so the selection state, its
-// zero-checked guard, and the request-shape it produces are unit-testable
-// without rendering the dialog. Mirrors the leadWeekBlastRecipients.ts
-// pattern.
+// LRM-13: pure selection-model logic for the "Summarize meeting" modal (the
+// meeting checkboxes shown before generateDraft is called to replace the
+// composer's body). Kept separate from React so the selection state, its
+// zero-checked guard, and the ordered id list it produces are unit-testable
+// without rendering the dialog.
+//
+// Replaces LRM-12's SourcePickerDialog model (buildInitialDraftSourceState /
+// toggleFocusSource / hasAnySourceChecked / buildDraftSourceParams): the
+// composer no longer offers a focus checkbox at all -- the edge function
+// includes the week's published focus automatically whenever one exists
+// (see docs/specs/lrm-13-composer-first.md, "How it works today" and
+// decision 3), so this module only ever tracks meeting selection.
 
 /**
- * What the source picker currently has checked. `checkedMeetingIds` only
- * ever contains ids that were offered to the picker (the week's own
- * meetings) -- the dialog never lets an id in that isn't one of those
- * checkboxes.
+ * What the "Summarize meeting" modal currently has checked. Only ever
+ * contains ids that were offered to the modal (the week's own meetings) --
+ * the dialog never lets an id in that isn't one of those checkboxes.
  */
-export interface DraftSourceState {
-  focusChecked: boolean;
+export interface MeetingSelectionState {
   checkedMeetingIds: Set<string>;
 }
 
 /**
- * The picker's opening state: everything checked (spec "Decisions locked" --
- * all checked by default), every time it opens, for both a brand-new draft
- * and a Regenerate. `hasPublishedFocus` gates whether the focus checkbox
- * exists at all; a week with no published focus has nothing there to check.
+ * The modal's opening state (spec decision 2): when the week has exactly
+ * one meeting, it comes pre-checked. With zero meetings or more than one,
+ * nothing starts checked -- she picks explicitly, and the confirm button
+ * stays disabled until at least one is checked (see
+ * hasAnyMeetingChecked).
  */
-export function buildInitialDraftSourceState(hasPublishedFocus: boolean, meetingIds: string[]): DraftSourceState {
-  return { focusChecked: hasPublishedFocus, checkedMeetingIds: new Set(meetingIds) };
+export function buildInitialMeetingSelection(meetingIds: string[]): MeetingSelectionState {
+  return { checkedMeetingIds: new Set(meetingIds.length === 1 ? meetingIds : []) };
 }
 
-export function toggleFocusSource(state: DraftSourceState): DraftSourceState {
-  return { ...state, focusChecked: !state.focusChecked };
-}
-
-export function toggleMeetingSource(state: DraftSourceState, meetingId: string): DraftSourceState {
+export function toggleMeetingSelection(state: MeetingSelectionState, meetingId: string): MeetingSelectionState {
   const next = new Set(state.checkedMeetingIds);
   if (next.has(meetingId)) next.delete(meetingId);
   else next.add(meetingId);
-  return { ...state, checkedMeetingIds: next };
+  return { checkedMeetingIds: next };
 }
 
-/** At least one source must stay checked (spec "Decisions locked"); the
- * Draft/Regenerate button disables when this is false. */
-export function hasAnySourceChecked(state: DraftSourceState): boolean {
-  return state.focusChecked || state.checkedMeetingIds.size > 0;
+/** At least one meeting must stay checked (spec decision 2); the modal's confirm button disables when this is false. */
+export function hasAnyMeetingChecked(state: MeetingSelectionState): boolean {
+  return state.checkedMeetingIds.size > 0;
 }
 
-/** The `include_focus` / `meeting_ids` shape the edge function's handleDraft
- * expects, built from the picker's current selection. `allMeetingIds` fixes
- * the output order to the week's own meeting order rather than Set iteration
- * order. */
-export function buildDraftSourceParams(
-  state: DraftSourceState,
-  allMeetingIds: string[],
-): { includeFocus: boolean; meetingIds: string[] } {
-  return {
-    includeFocus: state.focusChecked,
-    meetingIds: allMeetingIds.filter((id) => state.checkedMeetingIds.has(id)),
-  };
+/**
+ * The `meeting_ids` array generateDraft expects, built from the modal's
+ * current selection. `allMeetingIds` fixes the output order to the week's
+ * own meeting order rather than Set iteration order.
+ */
+export function buildSummarizeMeetingIds(state: MeetingSelectionState, allMeetingIds: string[]): string[] {
+  return allMeetingIds.filter((id) => state.checkedMeetingIds.has(id));
 }

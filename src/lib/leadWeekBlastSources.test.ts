@@ -1,101 +1,75 @@
 import { describe, it, expect } from 'vitest';
 import {
-  buildInitialDraftSourceState, toggleFocusSource, toggleMeetingSource,
-  hasAnySourceChecked, buildDraftSourceParams,
+  buildInitialMeetingSelection, toggleMeetingSelection,
+  hasAnyMeetingChecked, buildSummarizeMeetingIds,
 } from './leadWeekBlastSources';
 
-describe('buildInitialDraftSourceState', () => {
-  it('checks the focus box and every meeting by default', () => {
-    const state = buildInitialDraftSourceState(true, ['m1', 'm2']);
-    expect(state.focusChecked).toBe(true);
-    expect(state.checkedMeetingIds).toEqual(new Set(['m1', 'm2']));
+describe('buildInitialMeetingSelection', () => {
+  it('pre-checks the single meeting when the week has exactly one', () => {
+    const state = buildInitialMeetingSelection(['m1']);
+    expect(state.checkedMeetingIds).toEqual(new Set(['m1']));
   });
 
-  it('leaves the focus box unchecked (absent) when there is no published focus', () => {
-    const state = buildInitialDraftSourceState(false, ['m1']);
-    expect(state.focusChecked).toBe(false);
+  it('starts with nothing checked when the week has more than one meeting', () => {
+    const state = buildInitialMeetingSelection(['m1', 'm2']);
+    expect(state.checkedMeetingIds.size).toBe(0);
   });
 
-  it('starts with no meetings checked for a week with none logged', () => {
-    const state = buildInitialDraftSourceState(true, []);
+  it('starts with nothing checked for a week with no meetings', () => {
+    const state = buildInitialMeetingSelection([]);
     expect(state.checkedMeetingIds.size).toBe(0);
   });
 });
 
-describe('toggleFocusSource', () => {
-  it('flips focusChecked without touching the meeting selection', () => {
-    const state = buildInitialDraftSourceState(true, ['m1']);
-    const next = toggleFocusSource(state);
-    expect(next.focusChecked).toBe(false);
-    expect(next.checkedMeetingIds).toEqual(new Set(['m1']));
-  });
-
-  it('is reversible', () => {
-    const state = buildInitialDraftSourceState(false, []);
-    expect(toggleFocusSource(toggleFocusSource(state)).focusChecked).toBe(false);
-  });
-});
-
-describe('toggleMeetingSource', () => {
+describe('toggleMeetingSelection', () => {
   it('unchecks a meeting that was checked', () => {
-    const state = buildInitialDraftSourceState(true, ['m1', 'm2']);
-    const next = toggleMeetingSource(state, 'm1');
+    const state = buildInitialMeetingSelection(['m1']);
+    const next = toggleMeetingSelection(state, 'm1');
     expect(next.checkedMeetingIds.has('m1')).toBe(false);
-    expect(next.checkedMeetingIds.has('m2')).toBe(true);
   });
 
   it('rechecks a meeting that was unchecked', () => {
-    const state = toggleMeetingSource(buildInitialDraftSourceState(true, ['m1']), 'm1');
-    const next = toggleMeetingSource(state, 'm1');
+    const state = toggleMeetingSelection(buildInitialMeetingSelection(['m1']), 'm1');
+    const next = toggleMeetingSelection(state, 'm1');
     expect(next.checkedMeetingIds.has('m1')).toBe(true);
   });
 
   it('does not mutate the set it was given', () => {
-    const state = buildInitialDraftSourceState(true, ['m1']);
+    const state = buildInitialMeetingSelection(['m1']);
     const original = state.checkedMeetingIds;
-    toggleMeetingSource(state, 'm1');
+    toggleMeetingSelection(state, 'm1');
     expect(original.has('m1')).toBe(true);
   });
 
-  it('does not touch focusChecked', () => {
-    const state = buildInitialDraftSourceState(true, ['m1']);
-    const next = toggleMeetingSource(state, 'm1');
-    expect(next.focusChecked).toBe(true);
+  it('toggling one meeting leaves another untouched', () => {
+    const state = { checkedMeetingIds: new Set(['m1']) };
+    const next = toggleMeetingSelection(state, 'm2');
+    expect(next.checkedMeetingIds).toEqual(new Set(['m1', 'm2']));
   });
 });
 
-describe('hasAnySourceChecked', () => {
-  it('is true when the focus box alone is checked', () => {
-    expect(hasAnySourceChecked({ focusChecked: true, checkedMeetingIds: new Set() })).toBe(true);
+describe('hasAnyMeetingChecked', () => {
+  it('is true when at least one meeting is checked', () => {
+    expect(hasAnyMeetingChecked({ checkedMeetingIds: new Set(['m1']) })).toBe(true);
   });
 
-  it('is true when at least one meeting alone is checked', () => {
-    expect(hasAnySourceChecked({ focusChecked: false, checkedMeetingIds: new Set(['m1']) })).toBe(true);
-  });
-
-  it('is false once everything is unchecked (the Draft button disables here)', () => {
-    expect(hasAnySourceChecked({ focusChecked: false, checkedMeetingIds: new Set() })).toBe(false);
+  it('is false when nothing is checked (the confirm button disables here)', () => {
+    expect(hasAnyMeetingChecked({ checkedMeetingIds: new Set() })).toBe(false);
   });
 });
 
-describe('buildDraftSourceParams', () => {
-  it('carries focusChecked through as includeFocus', () => {
-    const state = buildInitialDraftSourceState(true, []);
-    expect(buildDraftSourceParams(state, []).includeFocus).toBe(true);
-  });
-
-  it('orders meetingIds by the week\'s own meeting order, not Set insertion order', () => {
-    const state = buildInitialDraftSourceState(true, ['m2', 'm1']);
-    expect(buildDraftSourceParams(state, ['m1', 'm2']).meetingIds).toEqual(['m1', 'm2']);
+describe('buildSummarizeMeetingIds', () => {
+  it('orders meeting ids by the week\'s own meeting order, not Set insertion order', () => {
+    const state = { checkedMeetingIds: new Set(['m2', 'm1']) };
+    expect(buildSummarizeMeetingIds(state, ['m1', 'm2'])).toEqual(['m1', 'm2']);
   });
 
   it('excludes an unchecked meeting from the output', () => {
-    const state = toggleMeetingSource(buildInitialDraftSourceState(true, ['m1', 'm2']), 'm2');
-    expect(buildDraftSourceParams(state, ['m1', 'm2']).meetingIds).toEqual(['m1']);
+    const state = toggleMeetingSelection(buildInitialMeetingSelection(['m1', 'm2']), 'm1');
+    expect(buildSummarizeMeetingIds(state, ['m1', 'm2'])).toEqual(['m1']);
   });
 
-  it('produces an explicit empty meetingIds array for a focus-only draft', () => {
-    const state = { focusChecked: true, checkedMeetingIds: new Set<string>() };
-    expect(buildDraftSourceParams(state, ['m1', 'm2']).meetingIds).toEqual([]);
+  it('produces an empty array when nothing is checked', () => {
+    expect(buildSummarizeMeetingIds({ checkedMeetingIds: new Set() }, ['m1', 'm2'])).toEqual([]);
   });
 });

@@ -11,7 +11,7 @@ import type { LeadMeetingRow } from '@/types/leadMeetings';
 import type { LeadWeekBlastRow, LeadWeekBlastRecipient } from '@/types/leadWeekBlasts';
 import { deriveFocusSlotState, deriveMeetingSlotState, meetingsInWeek } from '@/lib/leadMeetingsAndFocus';
 import {
-  deriveBlastSlotState, blastSlotBadgeStatus, blastBadgeLabel, shouldConfirmRegenerate,
+  deriveBlastSlotState, blastSlotBadgeStatus, blastBadgeLabel,
   canConfirmSend, formatSentSummary, buildDefaultBlastSubject, buildExcludedSuffix, canPolish,
   canDraftBlast, countSentBlasts, blastsForWeek, buildSendConfirmBody,
 } from '@/lib/leadWeekBlasts';
@@ -22,15 +22,17 @@ import {
   deriveExclusionIds, buildSendingSummary,
 } from '@/lib/leadWeekBlastRecipients';
 import {
-  buildInitialDraftSourceState, toggleFocusSource, toggleMeetingSource,
-  hasAnySourceChecked, buildDraftSourceParams,
-  type DraftSourceState,
+  buildInitialMeetingSelection, toggleMeetingSelection,
+  hasAnyMeetingChecked, buildSummarizeMeetingIds,
+  type MeetingSelectionState,
 } from '@/lib/leadWeekBlastSources';
+import { deriveSaveIndicatorState, type SaveIndicatorState } from '@/lib/leadWeekBlastSaveState';
 import {
   buildPipelineChips, deriveWeekGlyphStates, shouldHideEmptyBadge, isBuilderDirty,
   type WeekWhen, type PipelineChip, type PipelineChipStatus, type WeekGlyphStates,
 } from '@/lib/meetingsAndFocusView';
 import { formatDateForDisplay } from '@/lib/dateInputMask';
+import { formatMeetingLabel } from '@/lib/leadMeetingsAndFocus';
 import { RecordMeetingDialog } from '@/components/training/RecordMeetingDialog';
 import { StatusBadge, type BadgeStatus } from '@/components/ui/StatusBadge';
 import { Button } from '@/components/ui/button';
@@ -53,7 +55,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { toast } from '@/hooks/use-toast';
 import {
   ChevronLeft, ChevronRight, LayoutList, CalendarDays, Sparkles, Loader2, Plus, X, Shield,
-  Users, Mail, Send,
+  Users, Mail, Send, Trash2,
 } from 'lucide-react';
 import { CT_TZ } from '@/lib/centralTime';
 import { addDaysToDateString, mondaysInMonth as mondaysInMonthTz } from '@/lib/dateUtils';
@@ -408,7 +410,7 @@ function MeetingSlot({ meetings, onRecord, onOpen }: { meetings: LeadMeetingRow[
           className="flex w-full items-start gap-3 rounded-lg border p-3 text-left hover:bg-muted/40">
           <Users className="mt-0.5 h-4 w-4 flex-none text-muted-foreground" />
           <div className="min-w-0 flex-1">
-            <div className="text-sm font-semibold">{formatDateForDisplay(m.meeting_date)}</div>
+            <div className="text-sm font-semibold">{formatMeetingLabel(m.meeting_date, m.title)}</div>
             {m.internal_summary && <div className="mt-0.5 truncate text-xs text-muted-foreground">{m.internal_summary}</div>}
           </div>
         </button>
@@ -428,6 +430,10 @@ const fmtSentAt = (iso: string) =>
 const BLAST_QUILL_MODULES = {
   toolbar: [['bold', 'italic'], [{ list: 'ordered' }, { list: 'bullet' }], ['clean']],
 };
+
+// LRM-13: how long the composer waits after the last edit before autosaving,
+// within the spec's "roughly 1.5-2s" window.
+const AUTOSAVE_DEBOUNCE_MS = 1750;
 
 // Client-side render-time sanitization for stored blast HTML, matching the
 // same allowlist the edge function enforces server-side, and the same
@@ -507,28 +513,47 @@ function BlastSlot({
   const [drafting, setDrafting] = useState(false);
   const draftingRef = useRef(false);
   const [polishing, setPolishing] = useState(false);
-  const [regenConfirmOpen, setRegenConfirmOpen] = useState(false);
   const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [recipients, setRecipients] = useState<LeadWeekBlastRecipient[]>([]);
   const [excludedIds, setExcludedIds] = useState<Set<string>>(new Set());
   const [recipientsLoading, setRecipientsLoading] = useState(false);
-  const lastGeneratedRef = useRef('');
 
-  // LRM-12: the source picker shown before a brand-new draft or a
-  // Regenerate call. Always reset to "everything checked" when it opens
-  // (spec "Decisions locked") -- it never remembers a previous draft's
-  // narrowed selection.
-  const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
-  const [sourcePickerLabel, setSourcePickerLabel] = useState<'Draft blast' | 'Regenerate'>('Draft blast');
-  const [sourceState, setSourceState] = useState<DraftSourceState>(
-    () => buildInitialDraftSourceState(hasPublishedFocus, weekMeetings.map((m) => m.id)),
+  // LRM-13: creates a brand-new draft with an empty body -- "Draft blast" no
+  // longer generates anything on its own (spec decision 1). The composer
+  // opens blank; generation is now something she reaches for ("Summarize
+  // meeting" below), not a step she starts from. Guarded the same way
+  // runSummarize/the old runDraft are: the `isPending` flag lags a render
+  // behind, so a fast double-click could otherwise fire two inserts and
+  // trip the one-draft-per-week unique index.
+  const creatingDraftRef = useRef(false);
+  const onCreateEmptyDraftClick = () => {
+    if (creatingDraftRef.current) return;
+    creatingDraftRef.current = true;
+    blastsHook.createBlast.mutate(
+      { weekStartDate, body: '', subject: buildDefaultBlastSubject(weekStartDate) },
+      { onSettled: () => { creatingDraftRef.current = false; } },
+    );
+  };
+
+  // LRM-13: the meetings-only "Summarize meeting" modal, replacing LRM-12's
+  // focus+meetings SourcePickerDialog (decision 2 -- no focus checkbox; the
+  // edge function includes the week's published focus automatically).
+  // Always reset to the modal's own opening rule when it opens (see
+  // buildInitialMeetingSelection) -- it never remembers a previous open's
+  // selection.
+  const [summarizeOpen, setSummarizeOpen] = useState(false);
+  const [meetingSelection, setMeetingSelection] = useState<MeetingSelectionState>(
+    () => buildInitialMeetingSelection(weekMeetings.map((m) => m.id)),
   );
+  // LRM-13: the "this will replace your text" warning (decision 2), shown
+  // only when the editor already has real content at the moment the modal
+  // is confirmed.
+  const [replaceConfirmOpen, setReplaceConfirmOpen] = useState(false);
 
-  const openSourcePicker = (label: 'Draft blast' | 'Regenerate') => {
-    setSourceState(buildInitialDraftSourceState(hasPublishedFocus, weekMeetings.map((m) => m.id)));
-    setSourcePickerLabel(label);
-    setSourcePickerOpen(true);
+  const onSummarizeClick = () => {
+    setMeetingSelection(buildInitialMeetingSelection(weekMeetings.map((m) => m.id)));
+    setSummarizeOpen(true);
   };
 
   // Codex review (PR #115): live mirrors of the editor text and the loaded
@@ -545,18 +570,11 @@ function BlastSlot({
   // `value` is not always byte-identical to what ends up as the "current"
   // content. Comparing a freshly-loaded body against itself must not read
   // as an edit, so whenever we set editedBody to a value we intend as the
-  // new baseline (a loaded draft, or a fresh Regenerate result), this flag
-  // arms the editor's onReady callback to correct BOTH lastGeneratedRef and
-  // editedBody to Quill's own normalized output once it settles -- not the
-  // raw string we asked it to load.
+  // new baseline (a loaded draft, or a fresh Summarize result), this flag
+  // arms the editor's onReady callback to correct editedBody to Quill's own
+  // normalized output once it settles -- not the raw string we asked it to
+  // load.
   //
-  // QA fix (Codex review): the first version of this only corrected
-  // lastGeneratedRef, leaving editedBody on the raw pre-normalization
-  // string forever. Since the draft/regenerate prompt emits <ul><li> and
-  // Quill rewrites that to <ol data-list="bullet">, editedBody and
-  // lastGeneratedRef differed after essentially every draft with zero user
-  // edits, so shouldConfirmRegenerate popped "Replace the current draft?
-  // Your edits will be lost" on the very next Regenerate click.
   // pendingWrittenValueRef records exactly what was written so
   // reconcileNormalizedLoad can tell "nothing touched editedBody since the
   // write" (safe to replace with the normalized value) apart from "a
@@ -565,9 +583,9 @@ function BlastSlot({
   // against any path where a keystroke could land in the gap between the
   // write and onReady firing.
   //
-  // Deliberately NOT armed for Polish (see onPolishClick): that
-  // intentionally leaves lastGeneratedRef (and now editedBody's sync)
-  // pointing at the pre-polish text.
+  // Deliberately NOT armed for Polish (see onPolishClick): a polish result
+  // still goes through the normal onChange/autosave path like any edit, it
+  // just doesn't need this particular reconciliation.
   //
   // Codex review (PR #116, P2): a CHILD component's own mount effect runs
   // BEFORE this component's effects (React commits child effects
@@ -575,19 +593,16 @@ function BlastSlot({
   // seeding its initial content. So on first mount with an existing draft,
   // onReady's first call arrived here BEFORE the week-switch effect below
   // had a chance to arm this flag -- it was still `false`, the arm-worthy
-  // onReady call was silently ignored, and the flag stayed armed from the
-  // week-switch effect's own run, waiting for whatever onReady fired NEXT.
-  // That next call was often a Polish result (Polish sets editedBody -> the
-  // editor's controlled-value-sync effect -> onReady), so the polish
-  // output got wrongly adopted as the "generated" baseline and Regenerate
-  // stopped warning before discarding a fresh polish.
+  // onReady call was silently ignored, and the flag stayed armed for
+  // whatever onReady fired NEXT, wrongly reconciling an unrelated later
+  // write against the wrong written-value baseline.
   //
   // Fixed two ways together (traced empirically, not just reasoned through
   // -- React batches this component's own effect with the child's into one
   // update, so either fix alone still lets the second clobber the first):
-  // 1. These two refs are armed with their INITIAL values during render
-  //    (useRef's initial argument), before the child ever mounts, so the
-  //    very first onReady call has something correct to consume.
+  // 1. This ref is armed with its INITIAL value during render (useRef's
+  //    initial argument), before the child ever mounts, so the very first
+  //    onReady call has something correct to consume.
   // 2. The week-switch effect below skips its arm-then-set body on its own
   //    first run (isFirstRunRef) -- that effect always fires once at mount
   //    regardless of its dependency array, and since it unconditionally
@@ -601,7 +616,6 @@ function BlastSlot({
   const onEditorReady = (html: string) => {
     if (pendingGeneratedSyncRef.current) {
       pendingGeneratedSyncRef.current = false;
-      lastGeneratedRef.current = html;
       setEditedBody((current) => reconcileNormalizedLoad(current, pendingWrittenValueRef.current, html));
     }
   };
@@ -619,11 +633,27 @@ function BlastSlot({
   // existing arm-then-set ordering runs exactly as before.
   const isFirstRunRef = useRef(true);
 
+  // LRM-13: `savedSnapshot` is the body/subject last known to be persisted
+  // -- the save-state indicator's "dirty" reading is a plain !== comparison
+  // against it, and every successful save (autosave, blur-flush, or the
+  // Send/Test-send pre-send save) advances it. Initialized to match
+  // editedBody/editedSubject's own initializer, so a freshly loaded draft
+  // starts clean ("Saved", per spec).
+  const [savedSnapshot, setSavedSnapshot] = useState(() => ({
+    body: upgradeBlastBodyToHtml(draftBlast?.body ?? ''),
+    subject: draftBlast?.subject || buildDefaultBlastSubject(weekStartDate),
+  }));
+  // True only when the most recent save attempt for the CURRENT dirty
+  // content failed -- reset to false on every edit (a fresh edit is a
+  // fresh, not-yet-attempted save). See leadWeekBlastSaveState.ts.
+  const [saveFailed, setSaveFailed] = useState(false);
+  const autosaveTimerRef = useRef<number | null>(null);
+
   // Re-sync local edit state when a different week's draft loads. Keyed on
   // id + week so it doesn't stomp on in-progress typing when the query
   // silently refetches the same row. Existing rows are plain text (bare
-  // newlines) predating this ticket -- upgradeBlastBodyToHtml is a no-op for
-  // a body that's already HTML, and converts one that isn't into equivalent
+  // newlines) predating LRM-10 -- upgradeBlastBodyToHtml is a no-op for a
+  // body that's already HTML, and converts one that isn't into equivalent
   // HTML paragraphs so nothing is lost visually in the editor.
   useEffect(() => {
     if (isFirstRunRef.current) {
@@ -631,43 +661,95 @@ function BlastSlot({
       return;
     }
     const upgraded = upgradeBlastBodyToHtml(draftBlast?.body ?? '');
+    const subject = draftBlast?.subject || buildDefaultBlastSubject(weekStartDate);
     setEditedBody(upgraded);
-    setEditedSubject(draftBlast?.subject || buildDefaultBlastSubject(weekStartDate));
+    setEditedSubject(subject);
+    setSavedSnapshot({ body: upgraded, subject });
+    setSaveFailed(false);
     // Synchronous fallback baseline, corrected to Quill's normalized shape
     // by onEditorReady the moment the editor finishes loading it (see
     // pendingGeneratedSyncRef above).
-    lastGeneratedRef.current = upgraded;
     pendingWrittenValueRef.current = upgraded;
     pendingGeneratedSyncRef.current = true;
   }, [draftBlast?.id, weekStartDate]);
 
-  // LRM-12: `selection` is the source picker's confirmed choice
-  // (include_focus / meeting_ids), gathered before this ever runs -- see
-  // openSourcePicker / onConfirmSourcePicker below.
-  const runDraft = async (selection: { includeFocus: boolean; meetingIds: string[] }) => {
-    // Synchronous re-entry guard: the `drafting` state that disables the
-    // picker's confirm button lags a render behind, so a fast double-click
-    // could otherwise fire two inserts and trip the one-draft-per-week
-    // unique index with a raw Postgres error.
+  // LRM-13: the ONE persistence path for every edit -- typing, a Polish
+  // result, and a confirmed Summarize replacement all flow through the
+  // debounced autosave effect below, which calls this. Send/Test-send call
+  // it directly as their pre-send save (see needsSaveBeforeSend). Rethrows
+  // on failure so those two callers can still gate on it the same way they
+  // always have; the debounced/blur callers swallow the rejection (their
+  // job ends at setting saveFailed, which the indicator picks up).
+  const persistNow = async (body: string, subject: string) => {
+    if (!draftBlast) return;
+    try {
+      await blastsHook.updateBlastBody.mutateAsync({ id: draftBlast.id, body, subject });
+      setSavedSnapshot({ body, subject });
+      setSaveFailed(false);
+    } catch (err) {
+      setSaveFailed(true);
+      throw err;
+    }
+  };
+
+  const isDirty = !!draftBlast && (editedBody !== savedSnapshot.body || editedSubject !== savedSnapshot.subject);
+  const saveIndicator = deriveSaveIndicatorState({ dirty: isDirty, lastSaveFailed: saveFailed });
+
+  // LRM-13: debounced autosave -- save on idle (~1.5-2s after the last
+  // edit) and on blur (flushSave below), replacing the old manual "Save
+  // draft" button. Any edit resets saveFailed here, since a fresh edit
+  // means a fresh, not-yet-attempted save (see leadWeekBlastSaveState.ts's
+  // comment on why that matters for the indicator not getting stuck on
+  // "Not saved" after she starts typing again).
+  useEffect(() => {
+    setSaveFailed(false);
+    if (!draftBlast) return;
+    if (editedBody === savedSnapshot.body && editedSubject === savedSnapshot.subject) return;
+    if (autosaveTimerRef.current) window.clearTimeout(autosaveTimerRef.current);
+    autosaveTimerRef.current = window.setTimeout(() => {
+      autosaveTimerRef.current = null;
+      persistNow(editedBody, editedSubject).catch(() => {});
+    }, AUTOSAVE_DEBOUNCE_MS);
+    return () => {
+      if (autosaveTimerRef.current) {
+        window.clearTimeout(autosaveTimerRef.current);
+        autosaveTimerRef.current = null;
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editedBody, editedSubject, draftBlast?.id]);
+
+  // Flushes a pending debounced save immediately -- wired to the subject
+  // input's and the editor's onBlur, per spec ("save on idle and on
+  // blur").
+  const flushSave = () => {
+    if (autosaveTimerRef.current) {
+      window.clearTimeout(autosaveTimerRef.current);
+      autosaveTimerRef.current = null;
+    }
+    if (draftBlast && (editedBody !== savedSnapshot.body || editedSubject !== savedSnapshot.subject)) {
+      persistNow(editedBody, editedSubject).catch(() => {});
+    }
+  };
+
+  // LRM-13: generates a meeting summary and REPLACES the editor body --
+  // never appends (spec decision 2). Subject is left untouched. The
+  // replacement then autosaves like any other edit, through the same
+  // debounced effect above.
+  const runSummarize = async (meetingIds: string[]) => {
+    // Synchronous re-entry guard, same reasoning as the old runDraft's: the
+    // `drafting` state that disables the modal's confirm button lags a
+    // render behind a fast double-click.
     if (draftingRef.current) return;
     draftingRef.current = true;
     setDrafting(true);
     try {
-      const { body, subject } = await blastsHook.generateDraft.mutateAsync({
-        weekStartDate, includeFocus: selection.includeFocus, meetingIds: selection.meetingIds,
+      const { body } = await blastsHook.generateDraft.mutateAsync({
+        weekStartDate, includeFocus: true, meetingIds,
       });
-      lastGeneratedRef.current = body;
       pendingWrittenValueRef.current = body;
       pendingGeneratedSyncRef.current = true;
       setEditedBody(body);
-      if (draftBlast) {
-        // Regenerating an existing draft only replaces the body -- her
-        // subject line (default or hand-edited) is untouched.
-        blastsHook.updateBlastBody.mutate({ id: draftBlast.id, body, subject: draftBlast.subject });
-      } else {
-        setEditedSubject(subject);
-        blastsHook.createBlast.mutate({ weekStartDate, body, subject });
-      }
     } catch {
       // Failure toast already shown by the hook's onError.
     } finally {
@@ -676,28 +758,27 @@ function BlastSlot({
     }
   };
 
-  const onConfirmSourcePicker = () => {
-    const params = buildDraftSourceParams(sourceState, weekMeetings.map((m) => m.id));
-    setSourcePickerOpen(false);
-    runDraft(params);
-  };
-
-  const onRegenerateClick = () => {
-    if (shouldConfirmRegenerate(editedBody, lastGeneratedRef.current)) {
-      setRegenConfirmOpen(true);
+  // LRM-13: the modal only gathers a meeting selection; whether a second,
+  // separate warning is needed depends on the editor's CURRENT content at
+  // the moment it's confirmed (spec decision 2), not on anything the modal
+  // itself tracks.
+  const onConfirmSummarizeModal = () => {
+    setSummarizeOpen(false);
+    if (hasBlastBodyContent(editedBody)) {
+      setReplaceConfirmOpen(true);
     } else {
-      openSourcePicker('Regenerate');
+      runSummarize(buildSummarizeMeetingIds(meetingSelection, weekMeetings.map((m) => m.id)));
     }
   };
 
+  const onReplaceConfirm = () => {
+    setReplaceConfirmOpen(false);
+    runSummarize(buildSummarizeMeetingIds(meetingSelection, weekMeetings.map((m) => m.id)));
+  };
+
   // LRM-8: sends ONLY the current editor text -- never the week's focus
-  // items or meeting notes -- and replaces the editor with the result.
-  // Persistence mirrors how Regenerate saves an existing draft: only the
-  // body is written back, and the subject stays whatever is already
-  // persisted (draftBlast.subject), so an unsaved in-progress subject edit
-  // is never clobbered. Note lastGeneratedRef is deliberately left alone
-  // here -- it still points at the pre-polish text, so hitting Regenerate
-  // right after a polish still warns that the polish result will be lost.
+  // items or meeting notes -- and replaces the editor with the result. The
+  // replacement autosaves like any other edit, same as Summarize.
   const onPolishClick = async () => {
     if (!draftBlast) return;
     // Codex review (PR #115): capture what was sent and which row it was
@@ -720,7 +801,6 @@ function BlastSlot({
         return;
       }
       setEditedBody(polished);
-      blastsHook.updateBlastBody.mutate({ id: requestedBlastId, body: polished, subject: draftBlast.subject });
     } catch {
       // Failure toast already shown by the hook's onError.
     } finally {
@@ -751,14 +831,14 @@ function BlastSlot({
   // Send and Test-send are what-you-see-is-what-sends for every visible
   // field, so they now persist `subject: editedSubject` here, verbatim.
   //
-  // The in-flight lock this shares with "Save draft"
-  // (blastsHook.updateBlastBody.isPending disables both send buttons, see
-  // the JSX below) means a concurrent manual save can't race this one.
+  // The in-flight lock this shares with autosave (blastsHook.updateBlastBody
+  // .isPending disables both send buttons, see the JSX below) means a
+  // concurrent autosave can't race this one.
   const onTestSendClick = async () => {
     if (!draftBlast) return;
     if (needsSaveBeforeSend(editedBody, editedSubject, draftBlast.body, draftBlast.subject, buildDefaultBlastSubject(weekStartDate))) {
       try {
-        await blastsHook.updateBlastBody.mutateAsync({ id: draftBlast.id, body: editedBody, subject: editedSubject });
+        await persistNow(editedBody, editedSubject);
       } catch {
         // Failure toast already shown by the hook's onError (including the
         // sent-status seatbelt inside updateBlastBody) -- do not fire the
@@ -781,7 +861,7 @@ function BlastSlot({
         // from live editor state, not the DB row, so this is the only gate
         // standing between a stale draft (or stale subject) and a real
         // send.
-        await blastsHook.updateBlastBody.mutateAsync({ id: draftBlast.id, body: editedBody, subject: editedSubject });
+        await persistNow(editedBody, editedSubject);
       }
       const list = await blastsHook.fetchRecipients.mutateAsync();
       // Fresh every open: nothing carries over from a previous review.
@@ -849,34 +929,48 @@ function BlastSlot({
 
       {draftBlast ? (
         <div className="space-y-3">
-          <div>
-            <Label htmlFor="blast-subject" className="mb-1.5 block text-2xs font-semibold uppercase tracking-wider text-muted-foreground">Subject</Label>
-            <Input id="blast-subject" value={editedSubject} onChange={(e) => setEditedSubject(e.target.value)} />
+          <div className="flex items-end justify-between gap-3">
+            <div className="flex-1">
+              <Label htmlFor="blast-subject" className="mb-1.5 block text-2xs font-semibold uppercase tracking-wider text-muted-foreground">Subject</Label>
+              <Input id="blast-subject" value={editedSubject} onChange={(e) => setEditedSubject(e.target.value)} onBlur={flushSave} />
+            </div>
+            {/* LRM-13: the save-state indicator lives in the old "Save
+                draft" button's slot, tracking dirty state, not the network
+                request (see leadWeekBlastSaveState.ts). */}
+            <SaveIndicatorLabel state={saveIndicator} />
           </div>
           <RichTextEditor
             value={editedBody}
             onChange={setEditedBody}
             onReady={onEditorReady}
+            onBlur={flushSave}
             modules={BLAST_QUILL_MODULES}
             placeholder="Write the blast body here…"
             className="bg-background rounded-md [&_.ql-editor]:min-h-[220px]"
           />
           <div className="flex flex-wrap items-center gap-2">
+            {/* LRM-13: Discard relocated here -- visible without scrolling
+                whenever a draft is open, and clearly quieter than Send
+                (ghost variant, muted text, no fill) rather than the old
+                barely-visible text link below the action row. */}
+            <Button
+              size="sm"
+              variant="ghost"
+              className="text-muted-foreground hover:text-destructive"
+              onClick={() => setDiscardConfirmOpen(true)}
+            >
+              <Trash2 className="mr-1.5 h-4 w-4" />Discard draft
+            </Button>
             <Button
               size="sm"
               variant="outline"
-              disabled={!hasBlastBodyContent(editedBody) || drafting || polishing || blastsHook.updateBlastBody.isPending}
-              onClick={() => blastsHook.updateBlastBody.mutate({ id: draftBlast.id, body: editedBody, subject: editedSubject })}
+              disabled={drafting || polishing || weekMeetings.length === 0}
+              onClick={onSummarizeClick}
             >
-              {blastsHook.updateBlastBody.isPending ? (
-                <><Loader2 className="mr-1.5 h-4 w-4 animate-spin" />Saving…</>
-              ) : 'Save draft'}
-            </Button>
-            <Button size="sm" variant="outline" disabled={drafting || polishing} onClick={onRegenerateClick}>
               {drafting ? (
-                <><Loader2 className="mr-1.5 h-4 w-4 animate-spin" />Regenerating…</>
+                <><Loader2 className="mr-1.5 h-4 w-4 animate-spin" />Summarizing…</>
               ) : (
-                <><Sparkles className="mr-1.5 h-4 w-4" />Regenerate</>
+                <><Sparkles className="mr-1.5 h-4 w-4" />Summarize meeting</>
               )}
             </Button>
             <Button
@@ -912,28 +1006,15 @@ function BlastSlot({
             </Button>
           </div>
 
-          {/* LRM-12: a quiet way to abandon a targeted draft -- plain text,
-              not a filled/destructive button, so it doesn't compete with
-              the toolbar's real actions. */}
-          <div className="flex justify-end">
-            <button
-              type="button"
-              onClick={() => setDiscardConfirmOpen(true)}
-              className="text-2xs font-semibold text-muted-foreground underline-offset-2 hover:underline"
-            >
-              Discard draft
-            </button>
-          </div>
-
-          <AlertDialog open={regenConfirmOpen} onOpenChange={setRegenConfirmOpen}>
+          <AlertDialog open={replaceConfirmOpen} onOpenChange={setReplaceConfirmOpen}>
             <AlertDialogContent>
               <AlertDialogHeader>
-                <AlertDialogTitle>Replace the current draft?</AlertDialogTitle>
-                <AlertDialogDescription>Your edits will be lost.</AlertDialogDescription>
+                <AlertDialogTitle>Replace your text?</AlertDialogTitle>
+                <AlertDialogDescription>The meeting summary will replace what's currently in the editor. Your text will be lost.</AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
                 <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction onClick={() => { setRegenConfirmOpen(false); openSourcePicker('Regenerate'); }}>Replace</AlertDialogAction>
+                <AlertDialogAction onClick={onReplaceConfirm}>Replace</AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
@@ -970,93 +1051,100 @@ function BlastSlot({
               button -- only needed the first time, before anything has been
               sent yet. */}
           {sentBlasts.length === 0 && (
-            <p className="text-xs text-muted-foreground">Drafts from this week's focus and meeting.</p>
+            <p className="text-xs text-muted-foreground">Write it yourself, or summarize this week's meeting once the draft is open.</p>
           )}
           <div className="mt-3">
-            <Button disabled={!canStartDraft || drafting} onClick={() => openSourcePicker('Draft blast')}>
-              {drafting ? (
-                <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Drafting…</>
+            <Button disabled={!canStartDraft || blastsHook.createBlast.isPending} onClick={onCreateEmptyDraftClick}>
+              {blastsHook.createBlast.isPending ? (
+                <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Creating…</>
               ) : (
-                <><Sparkles className="mr-1.5 h-4 w-4" />{sentBlasts.length > 0 ? 'New blast' : 'Draft blast'}</>
+                <><Plus className="mr-1.5 h-4 w-4" />{sentBlasts.length > 0 ? 'New blast' : 'Draft blast'}</>
               )}
             </Button>
           </div>
         </div>
       )}
 
-      <SourcePickerDialog
-        open={sourcePickerOpen}
-        onOpenChange={setSourcePickerOpen}
-        hasPublishedFocus={hasPublishedFocus}
+      <SummarizeMeetingDialog
+        open={summarizeOpen}
+        onOpenChange={setSummarizeOpen}
         meetings={weekMeetings}
-        state={sourceState}
-        onToggleFocus={() => setSourceState((s) => toggleFocusSource(s))}
-        onToggleMeeting={(id) => setSourceState((s) => toggleMeetingSource(s, id))}
-        confirmLabel={sourcePickerLabel}
+        state={meetingSelection}
+        onToggleMeeting={(id) => setMeetingSelection((s) => toggleMeetingSelection(s, id))}
         confirming={drafting}
-        onConfirm={onConfirmSourcePicker}
+        onConfirm={onConfirmSummarizeModal}
       />
     </div>
   );
 }
 
 /**
- * LRM-12: the source picker shown before a brand-new draft or a Regenerate
- * call. Lists the week's published focus (if any) and each logged meeting,
- * labeled by its date, all checked by default. The confirm button disables
- * once every source is unchecked -- at least one must stay checked (spec
- * "Decisions locked").
+ * LRM-13: the save-state indicator that replaced the old "Save draft"
+ * button's slot. Purely a render of `deriveSaveIndicatorState`'s output --
+ * all the "does this flicker" logic lives in that pure function, tested on
+ * its own (leadWeekBlastSaveState.test.ts), not here.
  */
-function SourcePickerDialog({
-  open, onOpenChange, hasPublishedFocus, meetings, state, onToggleFocus, onToggleMeeting, confirmLabel, confirming, onConfirm,
+function SaveIndicatorLabel({ state }: { state: SaveIndicatorState }) {
+  if (state === 'saving') {
+    return <span className="text-2xs font-semibold text-muted-foreground">Saving…</span>;
+  }
+  if (state === 'not_saved') {
+    return <span className="text-2xs font-semibold text-destructive">Not saved</span>;
+  }
+  // 'saved' -- the one state that gets the green status token, never a
+  // hardcoded color (CLAUDE.md design system conventions).
+  return <span className="text-2xs font-semibold" style={{ color: 'hsl(var(--status-complete))' }}>Saved</span>;
+}
+
+/**
+ * LRM-13: the meetings-only modal behind "Summarize meeting", replacing
+ * LRM-12's SourcePickerDialog. No focus checkbox -- the edge function
+ * includes the week's published focus automatically (spec decision 3).
+ * Meeting labels use the same day-abbreviation + date + title format as
+ * MeetingSlot (formatMeetingLabel). The confirm button disables until at
+ * least one meeting is checked.
+ */
+function SummarizeMeetingDialog({
+  open, onOpenChange, meetings, state, onToggleMeeting, confirming, onConfirm,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  hasPublishedFocus: boolean;
   meetings: LeadMeetingRow[];
-  state: DraftSourceState;
-  onToggleFocus: () => void;
+  state: MeetingSelectionState;
   onToggleMeeting: (meetingId: string) => void;
-  confirmLabel: string;
   confirming: boolean;
   onConfirm: () => void;
 }) {
-  const canConfirm = hasAnySourceChecked(state);
+  const canConfirm = hasAnyMeetingChecked(state);
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>What should this draft include?</DialogTitle>
-          <DialogDescription>Uncheck a source to leave it out. At least one has to stay checked.</DialogDescription>
+          <DialogTitle>Summarize which meetings?</DialogTitle>
+          <DialogDescription>Check at least one meeting to summarize into the composer.</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-2">
-          {hasPublishedFocus && (
-            <div className="flex items-center gap-2 rounded-lg border p-2.5">
-              <Checkbox id="source-focus" checked={state.focusChecked} onCheckedChange={onToggleFocus} />
-              <Label htmlFor="source-focus" className="text-sm">This week's published focus</Label>
-            </div>
-          )}
           {meetings.map((m) => (
             <div key={m.id} className="flex items-center gap-2 rounded-lg border p-2.5">
               <Checkbox
-                id={`source-meeting-${m.id}`}
+                id={`summarize-meeting-${m.id}`}
                 checked={state.checkedMeetingIds.has(m.id)}
                 onCheckedChange={() => onToggleMeeting(m.id)}
               />
-              <Label htmlFor={`source-meeting-${m.id}`} className="text-sm">Meeting: {formatDateForDisplay(m.meeting_date)}</Label>
+              <Label htmlFor={`summarize-meeting-${m.id}`} className="text-sm">{formatMeetingLabel(m.meeting_date, m.title)}</Label>
             </div>
           ))}
         </div>
 
-        {!canConfirm && <p className="text-xs text-muted-foreground">Check at least one source to draft from.</p>}
+        {!canConfirm && <p className="text-xs text-muted-foreground">Check at least one meeting.</p>}
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
           <Button disabled={!canConfirm || confirming} onClick={onConfirm}>
             {confirming ? (
-              <><Loader2 className="mr-1.5 h-4 w-4 animate-spin" />Drafting…</>
-            ) : confirmLabel}
+              <><Loader2 className="mr-1.5 h-4 w-4 animate-spin" />Summarizing…</>
+            ) : 'Summarize'}
           </Button>
         </DialogFooter>
       </DialogContent>

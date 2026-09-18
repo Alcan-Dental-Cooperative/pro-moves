@@ -11,6 +11,9 @@ export interface LeadMeetingRow {
   week_start_date: string;   // YYYY-MM-DD (Monday, derived from meeting_date)
   raw_transcript: string | null;
   internal_summary: string | null;
+  // LRM-13: optional, disambiguates same-day meetings in the label everywhere
+  // one is shown (see src/lib/leadMeetingsAndFocus.ts's formatMeetingLabel).
+  title: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -20,9 +23,11 @@ export interface NewLeadMeetingInput {
   weekStartDate: string;     // YYYY-MM-DD
   rawTranscript: string;
   internalSummary: string;
+  title: string | null;
 }
 
 export interface UpdateLeadMeetingInput {
   id: string;
   internalSummary: string;
+  title: string | null;
 }
