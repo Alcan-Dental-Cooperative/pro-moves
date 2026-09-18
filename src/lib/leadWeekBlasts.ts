@@ -144,3 +144,38 @@ export function canPolish(body: string, busy: boolean): boolean {
 export function buildExcludedSuffix(excludedCount: number): string {
   return excludedCount > 0 ? ` (${excludedCount} excluded)` : '';
 }
+
+/**
+ * LRM-11: a week can now hold any number of sent blasts plus at most one
+ * open draft (enforced by the DB's partial unique index). Until LRM-12
+ * builds the stacked-cards slot UI, the tab still shows a single blast per
+ * week -- this picks WHICH one: the open draft if there is one (she's mid
+ * work on it), otherwise the most recently sent blast (by sent_at, falling
+ * back to created_at for a sent row that predates sent_at being stamped).
+ * Returns null for a week with no blasts at all. `blastsForWeek` is
+ * expected to already be filtered to one week; see selectActiveBlastForWeek
+ * for the convenience wrapper that does that filtering too.
+ */
+export function selectActiveWeekBlast(blastsForWeek: LeadWeekBlastRow[]): LeadWeekBlastRow | null {
+  const draft = blastsForWeek.find((b) => b.status === 'draft');
+  if (draft) return draft;
+
+  const sent = blastsForWeek.filter((b) => b.status === 'sent');
+  if (sent.length === 0) return null;
+
+  return sent.reduce((newest, candidate) => {
+    const newestTime = newest.sent_at ?? newest.created_at;
+    const candidateTime = candidate.sent_at ?? candidate.created_at;
+    return candidateTime > newestTime ? candidate : newest;
+  });
+}
+
+/**
+ * LRM-11: filters an unfiltered blast list down to one week, then applies
+ * selectActiveWeekBlast's draft-first-else-newest-sent rule. This is what
+ * MeetingsAndFocusTab calls in place of the old single-row `.find` now that
+ * a week can hold more than one row.
+ */
+export function selectActiveBlastForWeek(blasts: LeadWeekBlastRow[], weekStartDate: string): LeadWeekBlastRow | null {
+  return selectActiveWeekBlast(blasts.filter((b) => b.week_start_date === weekStartDate));
+}

@@ -3,6 +3,7 @@ import {
   canDraftBlast, deriveBlastSlotState, blastSlotBadgeStatus, blastBadgeLabel,
   buildSendConfirmBody, shouldConfirmRegenerate, canConfirmSend, formatSentSummary,
   buildDefaultBlastSubject, buildExcludedSuffix, canPolish,
+  selectActiveWeekBlast, selectActiveBlastForWeek,
 } from './leadWeekBlasts';
 import type { LeadWeekBlastRow } from '@/types/leadWeekBlasts';
 
@@ -212,5 +213,48 @@ describe('buildExcludedSuffix', () => {
 
   it('does not pluralize or otherwise special-case a single exclusion', () => {
     expect(buildExcludedSuffix(1)).toBe(' (1 excluded)');
+  });
+});
+
+describe('selectActiveWeekBlast', () => {
+  it('returns null for an empty week', () => {
+    expect(selectActiveWeekBlast([])).toBeNull();
+  });
+
+  it('returns the single draft when that is all there is', () => {
+    const draft = blast({ id: 'd1', status: 'draft' });
+    expect(selectActiveWeekBlast([draft])).toBe(draft);
+  });
+
+  it('prefers the open draft over any sent blasts', () => {
+    const sent = blast({ id: 's1', status: 'sent', sent_at: '2026-09-15T12:00:00Z' });
+    const draft = blast({ id: 'd1', status: 'draft' });
+    expect(selectActiveWeekBlast([sent, draft])).toBe(draft);
+  });
+
+  it('returns the most recently sent blast (by sent_at) when there is no open draft', () => {
+    const older = blast({ id: 's1', status: 'sent', sent_at: '2026-09-10T09:00:00Z' });
+    const newer = blast({ id: 's2', status: 'sent', sent_at: '2026-09-15T09:00:00Z' });
+    expect(selectActiveWeekBlast([older, newer])).toBe(newer);
+    expect(selectActiveWeekBlast([newer, older])).toBe(newer);
+  });
+
+  it('falls back to created_at when a sent row has no sent_at stamped', () => {
+    const older = blast({ id: 's1', status: 'sent', sent_at: null, created_at: '2026-09-10T09:00:00Z' });
+    const newer = blast({ id: 's2', status: 'sent', sent_at: null, created_at: '2026-09-15T09:00:00Z' });
+    expect(selectActiveWeekBlast([older, newer])).toBe(newer);
+  });
+});
+
+describe('selectActiveBlastForWeek', () => {
+  it('filters to the requested week before selecting', () => {
+    const thisWeek = blast({ id: 'a', week_start_date: '2026-09-14', status: 'draft' });
+    const otherWeek = blast({ id: 'b', week_start_date: '2026-09-07', status: 'draft' });
+    expect(selectActiveBlastForWeek([thisWeek, otherWeek], '2026-09-14')).toBe(thisWeek);
+  });
+
+  it('returns null when the week has no blasts', () => {
+    const otherWeek = blast({ id: 'b', week_start_date: '2026-09-07' });
+    expect(selectActiveBlastForWeek([otherWeek], '2026-09-14')).toBeNull();
   });
 });

@@ -2,6 +2,7 @@ import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { sanitizeBlastHtml, blastHtmlToPlainText, hasVisibleText, upgradeBlastBodyToHtml } from "./htmlUtils.ts";
+import { parseDraftSourceSelection, selectRequestedMeetings } from "./draftValidation.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -190,33 +191,57 @@ async function handleDraft(admin: ReturnType<typeof createClient>, callerStaff: 
     return jsonResponse({ error: 'week_start_date is required' }, 400);
   }
 
-  const { data: focusWeek } = await admin
-    .from('lead_focus_weeks')
-    .select('id, framing')
-    .eq('created_by', callerStaff.id)
-    .eq('week_start_date', weekStartDate)
-    .eq('status', 'published')
-    .maybeSingle();
+  // LRM-11: optional include_focus (default true) / meeting_ids (default
+  // all of the week's meetings) let a targeted draft skip either source.
+  // Malformed values 400 rather than coercing, so a client bug can't
+  // silently flip the focus flag or broaden a targeted draft to the week.
+  const parsed = parseDraftSourceSelection(payload);
+  if (!parsed.valid) {
+    return jsonResponse({ error: parsed.error }, 400);
+  }
+  const selection = parsed.selection;
 
+  let focusWeek: { id: string; framing: string | null } | null = null;
   let focusItems: { text: string; display_order: number }[] = [];
-  if (focusWeek?.id) {
-    const { data: items } = await admin
-      .from('lead_focus_items')
-      .select('text, display_order')
-      .eq('week_id', focusWeek.id)
-      .order('display_order', { ascending: true });
-    focusItems = items ?? [];
+  if (selection.includeFocus) {
+    const { data: fw } = await admin
+      .from('lead_focus_weeks')
+      .select('id, framing')
+      .eq('created_by', callerStaff.id)
+      .eq('week_start_date', weekStartDate)
+      .eq('status', 'published')
+      .maybeSingle();
+    focusWeek = fw ?? null;
+
+    if (focusWeek?.id) {
+      const { data: items } = await admin
+        .from('lead_focus_items')
+        .select('text, display_order')
+        .eq('week_id', focusWeek.id)
+        .order('display_order', { ascending: true });
+      focusItems = items ?? [];
+    }
   }
 
-  const { data: meetings } = await admin
+  // LRM-11: always load the week's own meetings (scoped to this caller AND
+  // this week) so meeting_ids can be validated against it -- an id outside
+  // this set is neither owned by the caller nor part of this week, so it's
+  // rejected rather than silently dropped.
+  const { data: weekMeetingRows } = await admin
     .from('lead_meetings')
-    .select('raw_transcript')
+    .select('id, raw_transcript')
     .eq('created_by', callerStaff.id)
     .eq('week_start_date', weekStartDate);
+  const weekMeetings = (weekMeetingRows ?? []) as { id: string; raw_transcript: string | null }[];
 
-  const transcripts = (meetings ?? [])
-    .map((m: any) => m.raw_transcript)
-    .filter((t: unknown): t is string => typeof t === 'string' && t.trim().length > 0);
+  const meetingSelection = selectRequestedMeetings(weekMeetings, selection.meetingIds);
+  if (!meetingSelection.valid) {
+    return jsonResponse({ error: 'One or more selected meetings could not be found in this week.' }, 400);
+  }
+
+  const transcripts = meetingSelection.meetings
+    .map((m) => m.raw_transcript)
+    .filter((t): t is string => typeof t === 'string' && t.trim().length > 0);
 
   if (focusItems.length === 0 && transcripts.length === 0) {
     return jsonResponse({ error: "This week needs a published focus or a logged meeting before you can draft a blast." }, 400);

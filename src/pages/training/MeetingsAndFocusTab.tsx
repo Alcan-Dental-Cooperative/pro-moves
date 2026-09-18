@@ -13,6 +13,7 @@ import { deriveFocusSlotState, deriveMeetingSlotState, meetingsInWeek } from '@/
 import {
   deriveBlastSlotState, blastSlotBadgeStatus, blastBadgeLabel, shouldConfirmRegenerate,
   canConfirmSend, formatSentSummary, buildDefaultBlastSubject, buildExcludedSuffix, canPolish,
+  selectActiveBlastForWeek,
   type BlastSlotState,
 } from '@/lib/leadWeekBlasts';
 import {
@@ -178,7 +179,11 @@ export function MeetingsAndFocusTab() {
   const focusState = deriveFocusSlotState(selected);
   const meetingState = deriveMeetingSlotState(weekMeetings);
 
-  const weekBlast = blastsHook.blasts.find((b) => b.week_start_date === selectedMonday) ?? null;
+  // LRM-11: a week can now hold more than one blast row (unlimited sent,
+  // one open draft). The tab still shows a single blast per week until
+  // LRM-12's stacked-cards UI ships -- selectActiveBlastForWeek picks the
+  // open draft if there is one, else the newest sent blast.
+  const weekBlast = selectActiveBlastForWeek(blastsHook.blasts, selectedMonday);
   const blastState = deriveBlastSlotState(focusState === 'completed', weekMeetings.length, weekBlast);
 
   const pipelineChips = buildPipelineChips(focusState, meetingState, blastState);
@@ -234,7 +239,7 @@ export function MeetingsAndFocusTab() {
             const w = weeksByDate.get(m); const set = !!w && w.items.length > 0;
             const isCurrent = m === currentMonday; const pastEmpty = m < currentMonday && !set;
             const monthRowMeetings = meetingsInWeek(meetingsHook.meetings, m);
-            const monthRowBlast = blastsHook.blasts.find((b) => b.week_start_date === m) ?? null;
+            const monthRowBlast = selectActiveBlastForWeek(blastsHook.blasts, m);
             const glyphStates = deriveWeekGlyphStates(w, monthRowMeetings, monthRowBlast);
             return (
               <button key={m}
