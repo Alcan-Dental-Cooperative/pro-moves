@@ -21,16 +21,35 @@ export type BlastSlotState = 'none' | 'draftable' | 'draft' | 'sent';
 
 /**
  * Derives the blast slot's state for a given week from what the week
- * contains (focus, meetings) and the week's blast row, if any.
+ * contains (focus, meetings) and the week's blast rows.
+ *
+ * LRM-12: a week can now hold any number of sent blasts plus at most one
+ * open draft (see the LRM-11 partial unique index), so this takes the
+ * week's whole blast list rather than a single row. Any sent blast reads
+ * as the most advanced state -- "sent" is terminal for the slot even while
+ * a further targeted draft is open underneath it.
  */
 export function deriveBlastSlotState(
   hasPublishedFocus: boolean,
   meetingCount: number,
-  blast: LeadWeekBlastRow | null,
+  blasts: LeadWeekBlastRow[],
 ): BlastSlotState {
-  if (blast?.status === 'sent') return 'sent';
-  if (blast?.status === 'draft') return 'draft';
+  if (blasts.some((b) => b.status === 'sent')) return 'sent';
+  if (blasts.some((b) => b.status === 'draft')) return 'draft';
   return canDraftBlast(hasPublishedFocus, meetingCount) ? 'draftable' : 'none';
+}
+
+/** LRM-12: how many of a week's blasts have already been sent, for the
+ * "2 sent" badge label. */
+export function countSentBlasts(blasts: LeadWeekBlastRow[]): number {
+  return blasts.filter((b) => b.status === 'sent').length;
+}
+
+/** LRM-12: all of a week's blast rows (unsorted), the input to the stacked
+ * slot UI -- BlastSlot separates this into its sent cards and its one
+ * possible open draft. */
+export function blastsForWeek(blasts: LeadWeekBlastRow[], weekStartDate: string): LeadWeekBlastRow[] {
+  return blasts.filter((b) => b.week_start_date === weekStartDate);
 }
 
 /**
@@ -48,13 +67,19 @@ export function blastSlotBadgeStatus(state: BlastSlotState): BadgeStatus {
 }
 
 /**
- * Body copy for the "Send this to all doctors?" confirm dialog, with the
- * live recipient count built in. Kept as a pure function so the exact
- * wording is unit-testable without rendering the dialog.
+ * Body copy for the recipient review dialog's confirm description, with the
+ * live included count built in (updates as she checks/unchecks doctors).
+ * Kept as a pure function so the exact wording is unit-testable without
+ * rendering the dialog.
+ *
+ * LRM-12: dropped "It cannot be sent twice" (a blast can now be followed by
+ * another, so the line was no longer true) in favor of naming exactly who
+ * this send reaches, since the count now changes live as she uses the
+ * Select all / Select none toggle and per-doctor checkboxes.
  */
-export function buildSendConfirmBody(recipientCount: number): string {
-  const doctorWord = recipientCount === 1 ? 'doctor' : 'doctors';
-  return `This emails ${recipientCount} ${doctorWord} across the organization. It cannot be sent twice.`;
+export function buildSendConfirmBody(includedCount: number): string {
+  const doctorWord = includedCount === 1 ? 'doctor' : 'doctors';
+  return `This will email ${includedCount} ${doctorWord}.`;
 }
 
 /**
@@ -87,9 +112,15 @@ export function formatSentSummary(recipientCount: number, failedCount: number): 
  * locked state, but the label softens from "Locked" to "Waiting" per the
  * show-do-not-lock principle -- an empty week isn't locked, it's just
  * waiting on a focus or meeting to draft from.
+ *
+ * LRM-12: also carries the sent count once a week has more than one sent
+ * blast ("2 sent") -- a single sent blast keeps the plain "Complete" label
+ * from StatusBadge's own default, unchanged from before this ticket.
  */
-export function blastBadgeLabel(state: BlastSlotState): string | undefined {
-  return state === 'none' ? 'Waiting' : undefined;
+export function blastBadgeLabel(state: BlastSlotState, sentCount = 0): string | undefined {
+  if (state === 'none') return 'Waiting';
+  if (state === 'sent' && sentCount > 1) return `${sentCount} sent`;
+  return undefined;
 }
 
 /**
@@ -147,20 +178,25 @@ export function buildExcludedSuffix(excludedCount: number): string {
 
 /**
  * LRM-11: a week can now hold any number of sent blasts plus at most one
- * open draft (enforced by the DB's partial unique index). Until LRM-12
- * builds the stacked-cards slot UI, the tab still shows a single blast per
- * week -- this picks WHICH one: the open draft if there is one (she's mid
- * work on it), otherwise the most recently sent blast (by sent_at, falling
- * back to created_at for a sent row that predates sent_at being stamped).
- * Returns null for a week with no blasts at all. `blastsForWeek` is
- * expected to already be filtered to one week; see selectActiveBlastForWeek
- * for the convenience wrapper that does that filtering too.
+ * open draft (enforced by the DB's partial unique index). This picks WHICH
+ * single row is "active": the open draft if there is one (she's mid work on
+ * it), otherwise the most recently sent blast (by sent_at, falling back to
+ * created_at for a sent row that predates sent_at being stamped). Returns
+ * null for a week with no blasts at all. The input list is expected to
+ * already be filtered to one week; see selectActiveBlastForWeek for the
+ * convenience wrapper that does that filtering too.
+ *
+ * LRM-12: the stacked-cards slot UI shows the week's WHOLE blast list (see
+ * blastsForWeek) rather than a single active row, so this and
+ * selectActiveBlastForWeek are no longer called from MeetingsAndFocusTab.
+ * Kept, and still covered by tests, in case a single-row "what's active"
+ * check is useful elsewhere later.
  */
-export function selectActiveWeekBlast(blastsForWeek: LeadWeekBlastRow[]): LeadWeekBlastRow | null {
-  const draft = blastsForWeek.find((b) => b.status === 'draft');
+export function selectActiveWeekBlast(weekBlasts: LeadWeekBlastRow[]): LeadWeekBlastRow | null {
+  const draft = weekBlasts.find((b) => b.status === 'draft');
   if (draft) return draft;
 
-  const sent = blastsForWeek.filter((b) => b.status === 'sent');
+  const sent = weekBlasts.filter((b) => b.status === 'sent');
   if (sent.length === 0) return null;
 
   return sent.reduce((newest, candidate) => {

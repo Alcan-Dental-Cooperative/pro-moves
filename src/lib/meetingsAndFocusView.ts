@@ -36,6 +36,7 @@ export function buildPipelineChips(
   focusState: SlotState,
   meetingState: SlotState,
   blastState: BlastSlotState,
+  sentBlastCount = 0,
 ): PipelineChip[] {
   // blastSlotBadgeStatus's declared return type is StatusBadge's full
   // BadgeStatus union (shared across the whole design system); its switch
@@ -44,15 +45,20 @@ export function buildPipelineChips(
   return [
     { key: 'focus', label: 'Focus', status: focusState },
     { key: 'meeting', label: 'Meeting', status: meetingState },
-    { key: 'blast', label: 'Blast', status: blastStatus, badgeLabel: blastBadgeLabel(blastState) },
+    { key: 'blast', label: 'Blast', status: blastStatus, badgeLabel: blastBadgeLabel(blastState, sentBlastCount) },
   ];
 }
 
 /**
  * Per-week state for the Month view's three tiny glyphs (W4), derived the
  * same way the week-spine's own slot states are: from the hydrated focus
- * week, that week's meetings, and that week's blast row (all already
+ * week, that week's meetings, and that week's blasts (all already
  * client-side once the three hooks have loaded).
+ *
+ * LRM-12: takes the week's whole blast list rather than one "active" row --
+ * the glyph itself only ever shows a single color/status, so more than one
+ * sent blast still just reads as the same "completed" dot the month view
+ * has always shown; a count label has no home in a plain color dot.
  */
 export interface WeekGlyphStates {
   focus: SlotState;
@@ -63,11 +69,11 @@ export interface WeekGlyphStates {
 export function deriveWeekGlyphStates(
   week: HydratedFocusWeek | null | undefined,
   meetingsForWeek: LeadMeetingRow[],
-  blast: LeadWeekBlastRow | null,
+  blastsForWeek: LeadWeekBlastRow[],
 ): WeekGlyphStates {
   const focus = deriveFocusSlotState(week);
   const meeting = deriveMeetingSlotState(meetingsForWeek);
-  const blastState = deriveBlastSlotState(focus === 'completed', meetingsForWeek.length, blast);
+  const blastState = deriveBlastSlotState(focus === 'completed', meetingsForWeek.length, blastsForWeek);
   return { focus, meeting, blast: blastState };
 }
 

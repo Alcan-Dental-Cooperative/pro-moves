@@ -61,11 +61,25 @@ describe('buildPipelineChips', () => {
     expect(blastChip?.status).toBe('completed');
     expect(blastChip?.badgeLabel).toBeUndefined();
   });
+
+  // LRM-12: the pipeline chip's blast badge carries the sent count once a
+  // week has more than one sent blast.
+  it('carries the sent count on the blast chip once more than one blast has been sent', () => {
+    const chips = buildPipelineChips('completed', 'completed', 'sent', 3);
+    const blastChip = chips.find((c) => c.key === 'blast');
+    expect(blastChip?.badgeLabel).toBe('3 sent');
+  });
+
+  it('has no count override for a single sent blast', () => {
+    const chips = buildPipelineChips('completed', 'completed', 'sent', 1);
+    const blastChip = chips.find((c) => c.key === 'blast');
+    expect(blastChip?.badgeLabel).toBeUndefined();
+  });
 });
 
 describe('deriveWeekGlyphStates', () => {
   it('reads every slot as empty for a week with nothing recorded', () => {
-    expect(deriveWeekGlyphStates(null, [], null)).toEqual({
+    expect(deriveWeekGlyphStates(null, [], [])).toEqual({
       focus: 'not_started', meeting: 'not_started', blast: 'none',
     });
   });
@@ -73,7 +87,7 @@ describe('deriveWeekGlyphStates', () => {
   it('reads a published focus, a logged meeting, and a sent blast as complete', () => {
     const w = week();
     const m = [meeting()];
-    const b = blast({ status: 'sent' });
+    const b = [blast({ status: 'sent' })];
     expect(deriveWeekGlyphStates(w, m, b)).toEqual({
       focus: 'completed', meeting: 'completed', blast: 'sent',
     });
@@ -81,14 +95,21 @@ describe('deriveWeekGlyphStates', () => {
 
   it('treats a draft-status week (unpublished) as not started', () => {
     const w = week({ status: 'draft' });
-    expect(deriveWeekGlyphStates(w, [], null).focus).toBe('not_started');
+    expect(deriveWeekGlyphStates(w, [], []).focus).toBe('not_started');
   });
 
-  it('reads a meeting-only week as draftable for the blast, with no focus or existing blast row', () => {
+  it('reads a meeting-only week as draftable for the blast, with no focus or existing blast rows', () => {
     const m = [meeting()];
-    expect(deriveWeekGlyphStates(undefined, m, null)).toEqual({
+    expect(deriveWeekGlyphStates(undefined, m, [])).toEqual({
       focus: 'not_started', meeting: 'completed', blast: 'draftable',
     });
+  });
+
+  // LRM-12: the glyph itself is a single color dot, so two sent blasts still
+  // just read as one "sent" glyph -- no count, no change in meaning.
+  it('reads multiple sent blasts the same as one: sent', () => {
+    const b = [blast({ id: 's1', status: 'sent' }), blast({ id: 's2', status: 'sent' })];
+    expect(deriveWeekGlyphStates(week(), [meeting()], b).blast).toBe('sent');
   });
 });
 

@@ -84,6 +84,23 @@ export function toggleAllExclusion(excludedIds: ReadonlySet<string>, recipients:
   return new Set();
 }
 
+/**
+ * LRM-12: the explicit "Select all" action. Unlike toggleAllExclusion, this
+ * is not a toggle -- from a PARTIAL selection (some doctors excluded, some
+ * not), a single toggle can't tell "select all" and "select none" apart
+ * without a second click, which is exactly the two-doctor-send case this
+ * ticket adds ("Select none, then check two names"). Explicit actions have
+ * no such ambiguity.
+ */
+export function selectAllRecipients(): Set<string> {
+  return new Set();
+}
+
+/** LRM-12: the explicit "Select none" action -- excludes every recipient. */
+export function selectNoRecipients(recipients: LeadWeekBlastRecipient[]): Set<string> {
+  return new Set(recipients.map((d) => d.staff_id));
+}
+
 /** How many of the total will actually receive the send, given the current exclusions. */
 export function deriveIncludedCount(totalCount: number, excludedCount: number): number {
   return Math.max(0, totalCount - excludedCount);

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   groupRecipientsByLocation, isGroupFullyIncluded, isEveryoneIncluded,
   toggleDoctorExclusion, toggleGroupExclusion, toggleAllExclusion,
+  selectAllRecipients, selectNoRecipients,
   deriveIncludedCount, buildSendingSummary, deriveExclusionIds,
   type RecipientLocationGroup,
 } from './leadWeekBlastRecipients';
@@ -134,6 +135,24 @@ describe('toggleAllExclusion', () => {
     const allIds = new Set(mixedCohort.map((d) => d.staff_id));
     const next = toggleAllExclusion(allIds, mixedCohort);
     expect(next.size).toBe(0);
+  });
+});
+
+describe('selectAllRecipients', () => {
+  it('returns an empty exclusion set (everyone included)', () => {
+    expect(selectAllRecipients().size).toBe(0);
+  });
+});
+
+describe('selectNoRecipients', () => {
+  it('excludes every recipient in the list', () => {
+    const next = selectNoRecipients(mixedCohort);
+    expect(next.size).toBe(mixedCohort.length);
+    for (const r2 of mixedCohort) expect(next.has(r2.staff_id)).toBe(true);
+  });
+
+  it('returns an empty set for an empty recipient list', () => {
+    expect(selectNoRecipients([]).size).toBe(0);
   });
 });
 

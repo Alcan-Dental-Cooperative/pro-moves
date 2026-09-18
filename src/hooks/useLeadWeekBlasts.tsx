@@ -61,6 +61,8 @@ export function useLeadWeekBlasts() {
     mutationFn: async ({ id, body, subject }: UpdateLeadWeekBlastInput) => {
       // Seatbelt: only a draft may be edited. A stale tab that lost a send
       // race matches zero rows here instead of rewriting the sent record.
+      // Since LRM-11 a zero-row match can also mean the draft was discarded,
+      // so the message stays neutral about which one happened.
       const { data, error } = await sb
         .from('lead_week_blasts')
         .update({ body, subject, updated_at: new Date().toISOString() })
@@ -68,7 +70,7 @@ export function useLeadWeekBlasts() {
         .eq('status', 'draft')
         .select('id');
       if (error) throw error;
-      if (!data || data.length === 0) throw new Error('This blast was already sent, so the draft can no longer be edited.');
+      if (!data || data.length === 0) throw new Error('This draft is no longer editable. It may have been sent or discarded.');
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: KEY }),
     onError: (e: any) =>
@@ -104,11 +106,24 @@ export function useLeadWeekBlasts() {
       toast({ title: "Couldn't discard the draft", description: e?.message ?? 'Please try again.', variant: 'destructive' }),
   });
 
-  /** Calls the lead-week-blast edge function's "draft" action. Does not write to the DB -- the caller saves the returned body/subject. */
+  /**
+   * Calls the lead-week-blast edge function's "draft" action. Does not write
+   * to the DB -- the caller saves the returned body/subject.
+   *
+   * LRM-12: `includeFocus`/`meetingIds` carry the source picker's selection
+   * through to the edge function's `include_focus`/`meeting_ids` fields
+   * (see handleDraft in supabase/functions/lead-week-blast/index.ts). Always
+   * sent explicitly (never omitted) so an empty meetingIds array reads as
+   * "focus-only, on purpose" rather than "not specified, use every
+   * meeting" -- the edge function's parseDraftSourceSelection treats those
+   * two cases differently.
+   */
   const generateDraft = useMutation({
-    mutationFn: async (weekStartDate: string): Promise<{ body: string; subject: string }> => {
+    mutationFn: async (
+      { weekStartDate, includeFocus, meetingIds }: { weekStartDate: string; includeFocus: boolean; meetingIds: string[] },
+    ): Promise<{ body: string; subject: string }> => {
       const { data, error } = await supabase.functions.invoke('lead-week-blast', {
-        body: { action: 'draft', week_start_date: weekStartDate },
+        body: { action: 'draft', week_start_date: weekStartDate, include_focus: includeFocus, meeting_ids: meetingIds },
       });
       if (error) throw error;
       const body = (data as any)?.body;
