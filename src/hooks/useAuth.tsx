@@ -15,6 +15,12 @@ interface AuthContextType {
   isLead: boolean;
   /** staff.pwa_enabled — per-user PWA activation flag (see src/lib/pwa.ts) */
   pwaEnabled: boolean;
+  /**
+   * staff.pwa_installed_at — first time this user was seen running the
+   * installed PWA (standalone). null = install never confirmed. Stamped by
+   * PwaManager via the record_pwa_install() RPC.
+   */
+  pwaInstalledAt: string | null;
   signInWithOtp: (email: string) => Promise<{ error: any }>;
   signInWithPassword: (email: string, password: string) => Promise<{ error: any }>;
   signUpWithPassword: (email: string, password: string) => Promise<{ error: any }>;
@@ -37,21 +43,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isParticipant, setIsParticipant] = useState(true);
   const [isLead, setIsLead] = useState(false);
   const [pwaEnabled, setPwaEnabled] = useState(false);
+  const [pwaInstalledAt, setPwaInstalledAt] = useState<string | null>(null);
 
   useEffect(() => {
     const checkUserStatus = async (userId: string) => {
       setRoleLoading(true);
       try {
-        // pwa_enabled is a recent additive column; generated types lag until
-        // Lovable's next regen, so the row is typed by hand here.
+        // pwa_enabled/pwa_installed_at are recent additive columns; generated
+        // types lag until Lovable's next regen, so the row is typed by hand here.
         const { data: rawData } = await supabase
           .from('staff')
-          .select('is_coach, is_super_admin, is_org_admin, is_participant, is_lead, pwa_enabled' as 'is_coach')
+          .select('is_coach, is_super_admin, is_org_admin, is_participant, is_lead, pwa_enabled, pwa_installed_at' as 'is_coach')
           .eq('user_id', userId)
           .single();
         const data = rawData as unknown as {
           is_coach: boolean; is_super_admin: boolean; is_org_admin: boolean | null;
           is_participant: boolean; is_lead: boolean | null; pwa_enabled: boolean | null;
+          pwa_installed_at: string | null;
         } | null;
 
         if (data) {
@@ -61,6 +69,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setIsParticipant(data.is_participant);
           setIsLead(data.is_lead || false);
           setPwaEnabled(data.pwa_enabled || false);
+          setPwaInstalledAt(data.pwa_installed_at || null);
         } else {
           // No staff record exists - reset all roles
           setIsCoach(false);
@@ -69,6 +78,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setIsParticipant(true);
           setIsLead(false);
           setPwaEnabled(false);
+          setPwaInstalledAt(null);
         }
       } finally {
         setRoleLoading(false);
@@ -124,6 +134,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setIsParticipant(true);
           setIsLead(false);
           setPwaEnabled(false);
+          setPwaInstalledAt(null);
         }
         
         setLoading(false);
@@ -231,12 +242,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const { data: rawData } = await supabase
         .from('staff')
-        .select('is_coach, is_super_admin, is_org_admin, is_participant, is_lead, pwa_enabled' as 'is_coach')
+        .select('is_coach, is_super_admin, is_org_admin, is_participant, is_lead, pwa_enabled, pwa_installed_at' as 'is_coach')
         .eq('user_id', user.id)
         .single();
       const data = rawData as unknown as {
         is_coach: boolean; is_super_admin: boolean; is_org_admin: boolean | null;
         is_participant: boolean; is_lead: boolean | null; pwa_enabled: boolean | null;
+        pwa_installed_at: string | null;
       } | null;
 
       if (data) {
@@ -246,6 +258,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setIsParticipant(data.is_participant);
         setIsLead(data.is_lead || false);
         setPwaEnabled(data.pwa_enabled || false);
+        setPwaInstalledAt(data.pwa_installed_at || null);
       } else {
         setIsCoach(false);
         setIsSuperAdmin(false);
@@ -273,6 +286,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isParticipant,
       isLead,
       pwaEnabled,
+      pwaInstalledAt,
       signInWithOtp,
       signInWithPassword,
       signUpWithPassword,

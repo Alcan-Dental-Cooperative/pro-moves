@@ -1,5 +1,13 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { getInstallPathway, isBannerDismissed, dismissBanner } from './pwa';
+import {
+  getInstallPathway,
+  isBannerDismissed,
+  dismissBanner,
+  isInstalledNudgeSnoozed,
+  snoozeInstalledNudge,
+  shouldShowInstalledNudge,
+  INSTALLED_NUDGE_SNOOZE_DAYS,
+} from './pwa';
 
 describe('getInstallPathway', () => {
   it('routes iOS Safari to the share-sheet steps', () => {
@@ -49,5 +57,59 @@ describe('banner dismissal (MOB-2: permanent, no 7-day re-nag)', () => {
     // dismissed" rather than crashing or misinterpreting the number.
     localStorage.setItem('pwa_banner_dismissed', String(Date.now()));
     expect(isBannerDismissed()).toBe(false);
+  });
+});
+
+describe('shouldShowInstalledNudge', () => {
+  const base = { installConfirmed: true, standalone: false, isMobile: true, snoozed: false };
+
+  it('shows for a confirmed installer browsing on mobile, unsnoozed', () => {
+    expect(shouldShowInstalledNudge(base)).toBe(true);
+  });
+
+  it('never shows inside the installed app itself', () => {
+    expect(shouldShowInstalledNudge({ ...base, standalone: true })).toBe(false);
+  });
+
+  it('never shows without a confirmed install (those users get the install banner)', () => {
+    expect(shouldShowInstalledNudge({ ...base, installConfirmed: false })).toBe(false);
+  });
+
+  it('never shows on desktop, where browser use is legitimate', () => {
+    expect(shouldShowInstalledNudge({ ...base, isMobile: false })).toBe(false);
+  });
+
+  it('respects an active snooze', () => {
+    expect(shouldShowInstalledNudge({ ...base, snoozed: true })).toBe(false);
+  });
+});
+
+describe('installed-nudge snooze (recurring, unlike the banner)', () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it('is not snoozed before snoozeInstalledNudge() is called', () => {
+    expect(isInstalledNudgeSnoozed()).toBe(false);
+  });
+
+  it('is snoozed immediately after, and stays snoozed just before expiry', () => {
+    const now = Date.now();
+    snoozeInstalledNudge(now);
+    expect(isInstalledNudgeSnoozed(now)).toBe(true);
+    const justBeforeExpiry = now + INSTALLED_NUDGE_SNOOZE_DAYS * 24 * 60 * 60 * 1000 - 1;
+    expect(isInstalledNudgeSnoozed(justBeforeExpiry)).toBe(true);
+  });
+
+  it('expires after the snooze window so the nudge recurs', () => {
+    const now = Date.now();
+    snoozeInstalledNudge(now);
+    const afterExpiry = now + INSTALLED_NUDGE_SNOOZE_DAYS * 24 * 60 * 60 * 1000;
+    expect(isInstalledNudgeSnoozed(afterExpiry)).toBe(false);
+  });
+
+  it('treats a corrupted stored value as not snoozed', () => {
+    localStorage.setItem('pwa_installed_nudge_snooze_until', 'garbage');
+    expect(isInstalledNudgeSnoozed()).toBe(false);
   });
 });
