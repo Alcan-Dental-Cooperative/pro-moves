@@ -4,6 +4,7 @@ import {
   buildSendConfirmBody, shouldConfirmRegenerate, canConfirmSend, formatSentSummary,
   buildDefaultBlastSubject, buildExcludedSuffix, canPolish,
   selectActiveWeekBlast, selectActiveBlastForWeek,
+  countSentBlasts, blastsForWeek,
 } from './leadWeekBlasts';
 import type { LeadWeekBlastRow } from '@/types/leadWeekBlasts';
 
@@ -38,28 +39,73 @@ describe('canDraftBlast', () => {
 });
 
 describe('deriveBlastSlotState', () => {
-  it('is none for an empty week with no blast row', () => {
-    expect(deriveBlastSlotState(false, 0, null)).toBe('none');
+  it('is none for an empty week with no blast rows', () => {
+    expect(deriveBlastSlotState(false, 0, [])).toBe('none');
   });
 
-  it('is draftable when the week has a published focus and no blast row yet', () => {
-    expect(deriveBlastSlotState(true, 0, null)).toBe('draftable');
+  it('is draftable when the week has a published focus and no blast rows yet', () => {
+    expect(deriveBlastSlotState(true, 0, [])).toBe('draftable');
   });
 
-  it('is draftable when the week has a logged meeting and no blast row yet', () => {
-    expect(deriveBlastSlotState(false, 1, null)).toBe('draftable');
+  it('is draftable when the week has a logged meeting and no blast rows yet', () => {
+    expect(deriveBlastSlotState(false, 1, [])).toBe('draftable');
   });
 
-  it('is draft when a draft blast row exists', () => {
-    expect(deriveBlastSlotState(true, 0, blast({ status: 'draft' }))).toBe('draft');
+  it('is draft when an open draft row exists', () => {
+    expect(deriveBlastSlotState(true, 0, [blast({ status: 'draft' })])).toBe('draft');
   });
 
-  it('is sent once the blast row is sent, regardless of the week contents', () => {
-    expect(deriveBlastSlotState(true, 1, blast({ status: 'sent' }))).toBe('sent');
+  it('is sent once any blast row is sent, regardless of the week contents', () => {
+    expect(deriveBlastSlotState(true, 1, [blast({ status: 'sent' })])).toBe('sent');
   });
 
   it('is sent even if the underlying focus/meetings would otherwise read as empty', () => {
-    expect(deriveBlastSlotState(false, 0, blast({ status: 'sent' }))).toBe('sent');
+    expect(deriveBlastSlotState(false, 0, [blast({ status: 'sent' })])).toBe('sent');
+  });
+
+  // LRM-12: a sent blast plus a further open draft in the same week is now
+  // possible (unlimited sent, one open draft). "sent" still wins -- the
+  // slot's top-level badge reads as complete even while a targeted follow-up
+  // draft is in progress underneath the sent stack.
+  it('is sent even when a further draft is open in the same week', () => {
+    const blasts = [blast({ id: 's1', status: 'sent' }), blast({ id: 'd1', status: 'draft' })];
+    expect(deriveBlastSlotState(true, 1, blasts)).toBe('sent');
+  });
+
+  it('is sent when more than one blast has been sent', () => {
+    const blasts = [blast({ id: 's1', status: 'sent' }), blast({ id: 's2', status: 'sent' })];
+    expect(deriveBlastSlotState(true, 1, blasts)).toBe('sent');
+  });
+});
+
+describe('countSentBlasts', () => {
+  it('is zero for an empty list', () => {
+    expect(countSentBlasts([])).toBe(0);
+  });
+
+  it('is zero when the only row is a draft', () => {
+    expect(countSentBlasts([blast({ status: 'draft' })])).toBe(0);
+  });
+
+  it('counts only the sent rows, ignoring any open draft', () => {
+    const blasts = [
+      blast({ id: 's1', status: 'sent' }),
+      blast({ id: 's2', status: 'sent' }),
+      blast({ id: 'd1', status: 'draft' }),
+    ];
+    expect(countSentBlasts(blasts)).toBe(2);
+  });
+});
+
+describe('blastsForWeek', () => {
+  it('returns only the rows matching the requested week', () => {
+    const thisWeek = blast({ id: 'a', week_start_date: '2026-09-14' });
+    const otherWeek = blast({ id: 'b', week_start_date: '2026-09-07' });
+    expect(blastsForWeek([thisWeek, otherWeek], '2026-09-14')).toEqual([thisWeek]);
+  });
+
+  it('returns an empty array for a week with no blasts', () => {
+    expect(blastsForWeek([blast({ week_start_date: '2026-09-07' })], '2026-09-14')).toEqual([]);
   });
 });
 
@@ -86,30 +132,38 @@ describe('blastBadgeLabel', () => {
     expect(blastBadgeLabel('none')).toBe('Waiting');
   });
 
-  it('has no override for draftable, draft, or sent', () => {
+  it('has no override for draftable or draft', () => {
     expect(blastBadgeLabel('draftable')).toBeUndefined();
     expect(blastBadgeLabel('draft')).toBeUndefined();
+  });
+
+  it('has no override for sent with zero or one sent blast (the default count)', () => {
     expect(blastBadgeLabel('sent')).toBeUndefined();
+    expect(blastBadgeLabel('sent', 1)).toBeUndefined();
+  });
+
+  it('carries the count once more than one blast has been sent', () => {
+    expect(blastBadgeLabel('sent', 2)).toBe('2 sent');
+    expect(blastBadgeLabel('sent', 5)).toBe('5 sent');
   });
 });
 
 describe('buildSendConfirmBody', () => {
   it('pluralizes doctors for counts other than one', () => {
-    expect(buildSendConfirmBody(4)).toBe(
-      'This emails 4 doctors across the organization. It cannot be sent twice.',
-    );
+    expect(buildSendConfirmBody(4)).toBe('This will email 4 doctors.');
   });
 
   it('uses the singular for exactly one doctor', () => {
-    expect(buildSendConfirmBody(1)).toBe(
-      'This emails 1 doctor across the organization. It cannot be sent twice.',
-    );
+    expect(buildSendConfirmBody(1)).toBe('This will email 1 doctor.');
   });
 
   it('handles zero as plural', () => {
-    expect(buildSendConfirmBody(0)).toBe(
-      'This emails 0 doctors across the organization. It cannot be sent twice.',
-    );
+    expect(buildSendConfirmBody(0)).toBe('This will email 0 doctors.');
+  });
+
+  it('has no em dash and no longer claims it cannot be sent twice', () => {
+    expect(buildSendConfirmBody(2)).not.toMatch(/—/);
+    expect(buildSendConfirmBody(2)).not.toMatch(/cannot be sent twice/);
   });
 });
 

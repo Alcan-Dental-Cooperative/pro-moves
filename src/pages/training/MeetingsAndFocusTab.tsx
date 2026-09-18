@@ -13,14 +13,19 @@ import { deriveFocusSlotState, deriveMeetingSlotState, meetingsInWeek } from '@/
 import {
   deriveBlastSlotState, blastSlotBadgeStatus, blastBadgeLabel, shouldConfirmRegenerate,
   canConfirmSend, formatSentSummary, buildDefaultBlastSubject, buildExcludedSuffix, canPolish,
-  selectActiveBlastForWeek,
-  type BlastSlotState,
+  canDraftBlast, countSentBlasts, blastsForWeek, buildSendConfirmBody,
 } from '@/lib/leadWeekBlasts';
 import {
-  groupRecipientsByLocation, isGroupFullyIncluded, isEveryoneIncluded,
-  toggleDoctorExclusion, toggleGroupExclusion, toggleAllExclusion,
+  groupRecipientsByLocation, isGroupFullyIncluded,
+  toggleDoctorExclusion, toggleGroupExclusion,
+  selectAllRecipients, selectNoRecipients,
   deriveExclusionIds, buildSendingSummary,
 } from '@/lib/leadWeekBlastRecipients';
+import {
+  buildInitialDraftSourceState, toggleFocusSource, toggleMeetingSource,
+  hasAnySourceChecked, buildDraftSourceParams,
+  type DraftSourceState,
+} from '@/lib/leadWeekBlastSources';
 import {
   buildPipelineChips, deriveWeekGlyphStates, shouldHideEmptyBadge, isBuilderDirty,
   type WeekWhen, type PipelineChip, type PipelineChipStatus, type WeekGlyphStates,
@@ -179,14 +184,16 @@ export function MeetingsAndFocusTab() {
   const focusState = deriveFocusSlotState(selected);
   const meetingState = deriveMeetingSlotState(weekMeetings);
 
-  // LRM-11: a week can now hold more than one blast row (unlimited sent,
-  // one open draft). The tab still shows a single blast per week until
-  // LRM-12's stacked-cards UI ships -- selectActiveBlastForWeek picks the
-  // open draft if there is one, else the newest sent blast.
-  const weekBlast = selectActiveBlastForWeek(blastsHook.blasts, selectedMonday);
-  const blastState = deriveBlastSlotState(focusState === 'completed', weekMeetings.length, weekBlast);
+  // LRM-11/12: a week can now hold any number of sent blasts plus at most
+  // one open draft. The stacked-cards slot UI (BlastSlot below) renders the
+  // week's whole list; the chip/badge states are derived from that same
+  // list so "sent" reads as the most advanced state no matter how many
+  // blasts have gone out.
+  const weekBlasts = blastsForWeek(blastsHook.blasts, selectedMonday);
+  const blastState = deriveBlastSlotState(focusState === 'completed', weekMeetings.length, weekBlasts);
+  const sentBlastCount = countSentBlasts(weekBlasts);
 
-  const pipelineChips = buildPipelineChips(focusState, meetingState, blastState);
+  const pipelineChips = buildPipelineChips(focusState, meetingState, blastState, sentBlastCount);
   const scrollToSlot = (key: PipelineChip['key']) => {
     document.getElementById(`slot-${key}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
@@ -239,8 +246,8 @@ export function MeetingsAndFocusTab() {
             const w = weeksByDate.get(m); const set = !!w && w.items.length > 0;
             const isCurrent = m === currentMonday; const pastEmpty = m < currentMonday && !set;
             const monthRowMeetings = meetingsInWeek(meetingsHook.meetings, m);
-            const monthRowBlast = selectActiveBlastForWeek(blastsHook.blasts, m);
-            const glyphStates = deriveWeekGlyphStates(w, monthRowMeetings, monthRowBlast);
+            const monthRowBlasts = blastsForWeek(blastsHook.blasts, m);
+            const glyphStates = deriveWeekGlyphStates(w, monthRowMeetings, monthRowBlasts);
             return (
               <button key={m}
                 onClick={() => guardedNavigate(() => { setSelectedMonday(m); setViewMode('week'); closeBuilder(); })}
@@ -278,10 +285,11 @@ export function MeetingsAndFocusTab() {
           </SlotSection>
 
           <SlotSection num={3} title="Doctor blast" state={blastSlotBadgeStatus(blastState)} id="slot-blast"
-            badgeLabel={blastBadgeLabel(blastState)} hideBadge={shouldHideEmptyBadge(when, blastState === 'none')}>
+            badgeLabel={blastBadgeLabel(blastState, sentBlastCount)} hideBadge={shouldHideEmptyBadge(when, blastState === 'none')}>
             <BlastSlot
-              state={blastState}
-              weekBlast={weekBlast}
+              hasPublishedFocus={focusState === 'completed'}
+              weekMeetings={weekMeetings}
+              weekBlasts={weekBlasts}
               weekStartDate={selectedMonday}
               blastsHook={blastsHook}
             />
@@ -432,32 +440,103 @@ const BLAST_SANITIZE_CONFIG = {
   ALLOWED_ATTR: [],
 };
 
+/**
+ * LRM-12: the read-only summary card for one sent blast, extracted from
+ * BlastSlot's old single-row 'sent' branch so the stack can render any
+ * number of them. Rendering/copy unchanged from before this ticket.
+ */
+function SentBlastCard({ blast }: { blast: LeadWeekBlastRow }) {
+  const summary = formatSentSummary(blast.recipient_count ?? 0, blast.failed_count ?? 0);
+  const excludedSuffix = buildExcludedSuffix(blast.excluded_staff_ids?.length ?? 0);
+  return (
+    <div className="space-y-2.5">
+      {/*
+        LRM-10: a sent blast can predate this ticket (plain text, bare
+        newlines) or postdate it (HTML). upgradeBlastBodyToHtml handles
+        both -- it's a no-op for a body that's already HTML, and converts
+        plain text into equivalent paragraphs -- so this one render path
+        covers old and new rows alike. Sanitized with the same allowlist
+        the server enforces before rendering, the same DOMPurify.sanitize +
+        dangerouslySetInnerHTML approach the app already uses for other
+        stored rich text (CombinedPrepView, MeetingOutcomeCapture,
+        DoctorReviewPrep, EvaluationViewer, InsightsDisplay).
+
+        Codex review (PR #116, P2): convertQuillListFlavors runs BEFORE
+        DOMPurify -- DOMPurify's ALLOWED_ATTR: [] below strips data-list
+        along with every other attribute, so a Quill-flavored bullet list
+        (`<ol><li data-list="bullet">`) has to become a real `<ul>` first
+        or it renders as a numbered list here too.
+      */}
+      <div
+        className="prose prose-sm max-w-none rounded-lg border bg-muted/30 p-3 text-sm text-muted-foreground dark:prose-invert"
+        dangerouslySetInnerHTML={{
+          __html: DOMPurify.sanitize(convertQuillListFlavors(upgradeBlastBodyToHtml(blast.body)), BLAST_SANITIZE_CONFIG),
+        }}
+      />
+      <div className="text-2xs font-semibold uppercase tracking-wider text-muted-foreground">
+        Sent {blast.sent_at && fmtSentAt(blast.sent_at)} · {summary}{excludedSuffix}
+      </div>
+    </div>
+  );
+}
+
 function BlastSlot({
-  state, weekBlast, weekStartDate, blastsHook,
+  hasPublishedFocus, weekMeetings, weekBlasts, weekStartDate, blastsHook,
 }: {
-  state: BlastSlotState;
-  weekBlast: LeadWeekBlastRow | null;
+  hasPublishedFocus: boolean;
+  weekMeetings: LeadMeetingRow[];
+  weekBlasts: LeadWeekBlastRow[];
   weekStartDate: string;
   blastsHook: ReturnType<typeof useLeadWeekBlasts>;
 }) {
-  const [editedBody, setEditedBody] = useState(upgradeBlastBodyToHtml(weekBlast?.body ?? ''));
-  const [editedSubject, setEditedSubject] = useState(weekBlast?.subject || buildDefaultBlastSubject(weekStartDate));
+  // LRM-12: a week's blasts split into any number of sent rows (rendered as
+  // a read-only stack, oldest first so the newest sent blast reads last)
+  // plus at most one open draft -- the DB's partial unique index guarantees
+  // there's never more than one. canStartDraft gates both the empty-week
+  // "Draft blast" button and the post-send "New blast" button, same
+  // canDraftBlast rule as before this ticket.
+  const sentBlasts = weekBlasts
+    .filter((b) => b.status === 'sent')
+    .slice()
+    .sort((a, b) => (a.sent_at ?? a.created_at).localeCompare(b.sent_at ?? b.created_at));
+  const draftBlast = weekBlasts.find((b) => b.status === 'draft') ?? null;
+  const canStartDraft = canDraftBlast(hasPublishedFocus, weekMeetings.length);
+
+  const [editedBody, setEditedBody] = useState(upgradeBlastBodyToHtml(draftBlast?.body ?? ''));
+  const [editedSubject, setEditedSubject] = useState(draftBlast?.subject || buildDefaultBlastSubject(weekStartDate));
   const [drafting, setDrafting] = useState(false);
   const [polishing, setPolishing] = useState(false);
   const [regenConfirmOpen, setRegenConfirmOpen] = useState(false);
+  const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [recipients, setRecipients] = useState<LeadWeekBlastRecipient[]>([]);
   const [excludedIds, setExcludedIds] = useState<Set<string>>(new Set());
   const [recipientsLoading, setRecipientsLoading] = useState(false);
   const lastGeneratedRef = useRef('');
 
+  // LRM-12: the source picker shown before a brand-new draft or a
+  // Regenerate call. Always reset to "everything checked" when it opens
+  // (spec "Decisions locked") -- it never remembers a previous draft's
+  // narrowed selection.
+  const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
+  const [sourcePickerLabel, setSourcePickerLabel] = useState<'Draft blast' | 'Regenerate'>('Draft blast');
+  const [sourceState, setSourceState] = useState<DraftSourceState>(
+    () => buildInitialDraftSourceState(hasPublishedFocus, weekMeetings.map((m) => m.id)),
+  );
+
+  const openSourcePicker = (label: 'Draft blast' | 'Regenerate') => {
+    setSourceState(buildInitialDraftSourceState(hasPublishedFocus, weekMeetings.map((m) => m.id)));
+    setSourcePickerLabel(label);
+    setSourcePickerOpen(true);
+  };
+
   // Codex review (PR #115): live mirrors of the editor text and the loaded
-  // blast row, so an in-flight polish can detect on resolve that the user
+  // draft row, so an in-flight polish can detect on resolve that the user
   // typed or navigated weeks mid-request and drop its stale result.
   const editedBodyRef = useRef(editedBody);
   editedBodyRef.current = editedBody;
-  const weekBlastRef = useRef(weekBlast);
-  weekBlastRef.current = weekBlast;
+  const draftBlastRef = useRef(draftBlast);
+  draftBlastRef.current = draftBlast;
 
   // LRM-10: RichTextEditor can rewrite structural markup when it loads a
   // value into Quill (observed: `<ul>` becomes `<ol data-list="bullet">`)
@@ -550,29 +629,34 @@ function BlastSlot({
       isFirstRunRef.current = false;
       return;
     }
-    const upgraded = upgradeBlastBodyToHtml(weekBlast?.body ?? '');
+    const upgraded = upgradeBlastBodyToHtml(draftBlast?.body ?? '');
     setEditedBody(upgraded);
-    setEditedSubject(weekBlast?.subject || buildDefaultBlastSubject(weekStartDate));
+    setEditedSubject(draftBlast?.subject || buildDefaultBlastSubject(weekStartDate));
     // Synchronous fallback baseline, corrected to Quill's normalized shape
     // by onEditorReady the moment the editor finishes loading it (see
     // pendingGeneratedSyncRef above).
     lastGeneratedRef.current = upgraded;
     pendingWrittenValueRef.current = upgraded;
     pendingGeneratedSyncRef.current = true;
-  }, [weekBlast?.id, weekStartDate]);
+  }, [draftBlast?.id, weekStartDate]);
 
-  const runDraft = async () => {
+  // LRM-12: `selection` is the source picker's confirmed choice
+  // (include_focus / meeting_ids), gathered before this ever runs -- see
+  // openSourcePicker / onConfirmSourcePicker below.
+  const runDraft = async (selection: { includeFocus: boolean; meetingIds: string[] }) => {
     setDrafting(true);
     try {
-      const { body, subject } = await blastsHook.generateDraft.mutateAsync(weekStartDate);
+      const { body, subject } = await blastsHook.generateDraft.mutateAsync({
+        weekStartDate, includeFocus: selection.includeFocus, meetingIds: selection.meetingIds,
+      });
       lastGeneratedRef.current = body;
       pendingWrittenValueRef.current = body;
       pendingGeneratedSyncRef.current = true;
       setEditedBody(body);
-      if (weekBlast) {
+      if (draftBlast) {
         // Regenerating an existing draft only replaces the body -- her
         // subject line (default or hand-edited) is untouched.
-        blastsHook.updateBlastBody.mutate({ id: weekBlast.id, body, subject: weekBlast.subject });
+        blastsHook.updateBlastBody.mutate({ id: draftBlast.id, body, subject: draftBlast.subject });
       } else {
         setEditedSubject(subject);
         blastsHook.createBlast.mutate({ weekStartDate, body, subject });
@@ -584,11 +668,17 @@ function BlastSlot({
     }
   };
 
+  const onConfirmSourcePicker = () => {
+    const params = buildDraftSourceParams(sourceState, weekMeetings.map((m) => m.id));
+    setSourcePickerOpen(false);
+    runDraft(params);
+  };
+
   const onRegenerateClick = () => {
     if (shouldConfirmRegenerate(editedBody, lastGeneratedRef.current)) {
       setRegenConfirmOpen(true);
     } else {
-      runDraft();
+      openSourcePicker('Regenerate');
     }
   };
 
@@ -596,21 +686,21 @@ function BlastSlot({
   // items or meeting notes -- and replaces the editor with the result.
   // Persistence mirrors how Regenerate saves an existing draft: only the
   // body is written back, and the subject stays whatever is already
-  // persisted (weekBlast.subject), so an unsaved in-progress subject edit
+  // persisted (draftBlast.subject), so an unsaved in-progress subject edit
   // is never clobbered. Note lastGeneratedRef is deliberately left alone
   // here -- it still points at the pre-polish text, so hitting Regenerate
   // right after a polish still warns that the polish result will be lost.
   const onPolishClick = async () => {
-    if (!weekBlast) return;
+    if (!draftBlast) return;
     // Codex review (PR #115): capture what was sent and which row it was
     // for, so a slow response can be recognized as stale and dropped
     // instead of stomping newer typing or another week's editor.
     const requestedBody = editedBody;
-    const requestedBlastId = weekBlast.id;
+    const requestedBlastId = draftBlast.id;
     setPolishing(true);
     try {
       const polished = await blastsHook.polishDraft.mutateAsync(requestedBody);
-      const staleRow = weekBlastRef.current?.id !== requestedBlastId;
+      const staleRow = draftBlastRef.current?.id !== requestedBlastId;
       const staleText = editedBodyRef.current !== requestedBody;
       if (staleRow || staleText) {
         toast({
@@ -622,7 +712,7 @@ function BlastSlot({
         return;
       }
       setEditedBody(polished);
-      blastsHook.updateBlastBody.mutate({ id: requestedBlastId, body: polished, subject: weekBlast.subject });
+      blastsHook.updateBlastBody.mutate({ id: requestedBlastId, body: polished, subject: draftBlast.subject });
     } catch {
       // Failure toast already shown by the hook's onError.
     } finally {
@@ -641,7 +731,7 @@ function BlastSlot({
   // the conservative, no-normalization strict comparison for body, and why
   // subject gets one narrow, provably-safe exception.
   //
-  // QA follow-up: the first version of this saved `subject: weekBlast.subject`
+  // QA follow-up: the first version of this saved `subject: draftBlast.subject`
   // (the STALE saved subject), matching the Polish/Regenerate convention of
   // never touching subject. That reproduced the exact same incident class
   // for a subject-only edit -- the review dialog renders
@@ -657,10 +747,10 @@ function BlastSlot({
   // (blastsHook.updateBlastBody.isPending disables both send buttons, see
   // the JSX below) means a concurrent manual save can't race this one.
   const onTestSendClick = async () => {
-    if (!weekBlast) return;
-    if (needsSaveBeforeSend(editedBody, editedSubject, weekBlast.body, weekBlast.subject, buildDefaultBlastSubject(weekStartDate))) {
+    if (!draftBlast) return;
+    if (needsSaveBeforeSend(editedBody, editedSubject, draftBlast.body, draftBlast.subject, buildDefaultBlastSubject(weekStartDate))) {
       try {
-        await blastsHook.updateBlastBody.mutateAsync({ id: weekBlast.id, body: editedBody, subject: editedSubject });
+        await blastsHook.updateBlastBody.mutateAsync({ id: draftBlast.id, body: editedBody, subject: editedSubject });
       } catch {
         // Failure toast already shown by the hook's onError (including the
         // sent-status seatbelt inside updateBlastBody) -- do not fire the
@@ -668,22 +758,22 @@ function BlastSlot({
         return;
       }
     }
-    blastsHook.testSendBlast.mutate(weekBlast.id, {
+    blastsHook.testSendBlast.mutate(draftBlast.id, {
       onSuccess: (data) => toast({ title: 'Test sent', description: `Sent to ${data.email}.` }),
     });
   };
 
   const onSendClick = async () => {
-    if (!weekBlast) return;
+    if (!draftBlast) return;
     setRecipientsLoading(true);
     try {
-      if (needsSaveBeforeSend(editedBody, editedSubject, weekBlast.body, weekBlast.subject, buildDefaultBlastSubject(weekStartDate))) {
+      if (needsSaveBeforeSend(editedBody, editedSubject, draftBlast.body, draftBlast.subject, buildDefaultBlastSubject(weekStartDate))) {
         // Persist before recipients are even fetched, let alone the review
         // dialog opens -- the dialog previews no body and previews subject
         // from live editor state, not the DB row, so this is the only gate
         // standing between a stale draft (or stale subject) and a real
         // send.
-        await blastsHook.updateBlastBody.mutateAsync({ id: weekBlast.id, body: editedBody, subject: editedSubject });
+        await blastsHook.updateBlastBody.mutateAsync({ id: draftBlast.id, body: editedBody, subject: editedSubject });
       }
       const list = await blastsHook.fetchRecipients.mutateAsync();
       // Fresh every open: nothing carries over from a previous review.
@@ -709,9 +799,9 @@ function BlastSlot({
   const includedCount = recipients.length - excludedIds.size;
 
   const confirmSend = () => {
-    if (!weekBlast) return;
+    if (!draftBlast) return;
     blastsHook.sendBlast.mutate(
-      { blastId: weekBlast.id, excludedStaffIds: deriveExclusionIds(excludedIds) },
+      { blastId: draftBlast.id, excludedStaffIds: deriveExclusionIds(excludedIds) },
       {
         onSuccess: (data) => {
           setReviewOpen(false);
@@ -731,151 +821,238 @@ function BlastSlot({
     );
   };
 
-  if (state === 'none' || state === 'draftable') {
-    return (
-      <div className="rounded-lg border border-dashed py-8 text-center text-sm text-muted-foreground">
-        <Mail className="mx-auto mb-2 h-6 w-6 text-muted-foreground" />
-        {/* W3: explain what a draft draws from instead of a bare disabled button. */}
-        <p className="text-xs text-muted-foreground">Drafts from this week's focus and meeting.</p>
-        <div className="mt-3">
-          <Button disabled={state === 'none' || drafting} onClick={runDraft}>
-            {drafting ? (
-              <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Drafting…</>
-            ) : (
-              <><Sparkles className="mr-1.5 h-4 w-4" />Draft blast</>
-            )}
-          </Button>
-        </div>
-      </div>
-    );
-  }
+  // LRM-12: discards the open draft outright (blastsHook.deleteDraft is
+  // draft-only, same seatbelt pattern as updateBlastBody -- see the hook).
+  // Confirmed via discardConfirmOpen below before this ever runs.
+  const onDiscardConfirm = () => {
+    if (!draftBlast) return;
+    blastsHook.deleteDraft.mutate(draftBlast.id, {
+      onSuccess: () => toast({ title: 'Draft discarded' }),
+    });
+    setDiscardConfirmOpen(false);
+  };
 
-  if (state === 'sent' && weekBlast) {
-    const summary = formatSentSummary(weekBlast.recipient_count ?? 0, weekBlast.failed_count ?? 0);
-    const excludedSuffix = buildExcludedSuffix(weekBlast.excluded_staff_ids?.length ?? 0);
-    return (
-      <div className="space-y-2.5">
-        {/*
-          LRM-10: a sent blast can predate this ticket (plain text, bare
-          newlines) or postdate it (HTML). upgradeBlastBodyToHtml handles
-          both -- it's a no-op for a body that's already HTML, and converts
-          plain text into equivalent paragraphs -- so this one render path
-          covers old and new rows alike. Sanitized with the same allowlist
-          the server enforces before rendering, the same DOMPurify.sanitize +
-          dangerouslySetInnerHTML approach the app already uses for other
-          stored rich text (CombinedPrepView, MeetingOutcomeCapture,
-          DoctorReviewPrep, EvaluationViewer, InsightsDisplay).
-
-          Codex review (PR #116, P2): convertQuillListFlavors runs BEFORE
-          DOMPurify -- DOMPurify's ALLOWED_ATTR: [] below strips data-list
-          along with every other attribute, so a Quill-flavored bullet list
-          (`<ol><li data-list="bullet">`) has to become a real `<ul>` first
-          or it renders as a numbered list here too.
-        */}
-        <div
-          className="prose prose-sm max-w-none rounded-lg border bg-muted/30 p-3 text-sm text-muted-foreground dark:prose-invert"
-          dangerouslySetInnerHTML={{
-            __html: DOMPurify.sanitize(convertQuillListFlavors(upgradeBlastBodyToHtml(weekBlast.body)), BLAST_SANITIZE_CONFIG),
-          }}
-        />
-        <div className="text-2xs font-semibold uppercase tracking-wider text-muted-foreground">
-          Sent {weekBlast.sent_at && fmtSentAt(weekBlast.sent_at)} · {summary}{excludedSuffix}
-        </div>
-      </div>
-    );
-  }
-
-  // state === 'draft'
   return (
-    <div className="space-y-3">
-      <div>
-        <Label htmlFor="blast-subject" className="mb-1.5 block text-2xs font-semibold uppercase tracking-wider text-muted-foreground">Subject</Label>
-        <Input id="blast-subject" value={editedSubject} onChange={(e) => setEditedSubject(e.target.value)} />
-      </div>
-      <RichTextEditor
-        value={editedBody}
-        onChange={setEditedBody}
-        onReady={onEditorReady}
-        modules={BLAST_QUILL_MODULES}
-        placeholder="Write the blast body here…"
-        className="bg-background rounded-md [&_.ql-editor]:min-h-[220px]"
-      />
-      <div className="flex flex-wrap items-center gap-2">
-        <Button
-          size="sm"
-          variant="outline"
-          disabled={!hasBlastBodyContent(editedBody) || !weekBlast || drafting || polishing || blastsHook.updateBlastBody.isPending}
-          onClick={() => weekBlast && blastsHook.updateBlastBody.mutate({ id: weekBlast.id, body: editedBody, subject: editedSubject })}
-        >
-          {blastsHook.updateBlastBody.isPending ? (
-            <><Loader2 className="mr-1.5 h-4 w-4 animate-spin" />Saving…</>
-          ) : 'Save draft'}
-        </Button>
-        <Button size="sm" variant="outline" disabled={drafting || polishing} onClick={onRegenerateClick}>
-          {drafting ? (
-            <><Loader2 className="mr-1.5 h-4 w-4 animate-spin" />Regenerating…</>
-          ) : (
-            <><Sparkles className="mr-1.5 h-4 w-4" />Regenerate</>
-          )}
-        </Button>
-        <Button
-          size="sm"
-          variant="outline"
-          disabled={!weekBlast || !canPolish(editedBody, drafting || polishing)}
-          onClick={onPolishClick}
-        >
-          {polishing ? (
-            <><Loader2 className="mr-1.5 h-4 w-4 animate-spin" />Polishing…</>
-          ) : (
-            <><Sparkles className="mr-1.5 h-4 w-4" />Polish</>
-          )}
-        </Button>
-        <Button
-          size="sm"
-          variant="outline"
-          disabled={!hasBlastBodyContent(editedBody) || !weekBlast || drafting || polishing || blastsHook.updateBlastBody.isPending || blastsHook.testSendBlast.isPending}
-          onClick={onTestSendClick}
-        >
-          {blastsHook.testSendBlast.isPending ? (
-            <><Loader2 className="mr-1.5 h-4 w-4 animate-spin" />Sending test…</>
-          ) : (
-            <><Send className="mr-1.5 h-4 w-4" />Send a test to me</>
-          )}
-        </Button>
-        <Button size="sm" className="ml-auto" disabled={!hasBlastBodyContent(editedBody) || !weekBlast || drafting || polishing || blastsHook.updateBlastBody.isPending || recipientsLoading} onClick={onSendClick}>
-          {recipientsLoading ? (
-            <><Loader2 className="mr-1.5 h-4 w-4 animate-spin" />Checking…</>
-          ) : (
-            <><Mail className="mr-1.5 h-4 w-4" />Send to doctors</>
-          )}
-        </Button>
-      </div>
+    <div className="space-y-2.5">
+      {/* LRM-12: sent blasts stack oldest-first (newest last), read-only. */}
+      {sentBlasts.map((b) => (
+        <SentBlastCard key={b.id} blast={b} />
+      ))}
 
-      <AlertDialog open={regenConfirmOpen} onOpenChange={setRegenConfirmOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Replace the current draft?</AlertDialogTitle>
-            <AlertDialogDescription>Your edits will be lost.</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={() => { setRegenConfirmOpen(false); runDraft(); }}>Replace</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {draftBlast ? (
+        <div className="space-y-3">
+          <div>
+            <Label htmlFor="blast-subject" className="mb-1.5 block text-2xs font-semibold uppercase tracking-wider text-muted-foreground">Subject</Label>
+            <Input id="blast-subject" value={editedSubject} onChange={(e) => setEditedSubject(e.target.value)} />
+          </div>
+          <RichTextEditor
+            value={editedBody}
+            onChange={setEditedBody}
+            onReady={onEditorReady}
+            modules={BLAST_QUILL_MODULES}
+            placeholder="Write the blast body here…"
+            className="bg-background rounded-md [&_.ql-editor]:min-h-[220px]"
+          />
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={!hasBlastBodyContent(editedBody) || drafting || polishing || blastsHook.updateBlastBody.isPending}
+              onClick={() => blastsHook.updateBlastBody.mutate({ id: draftBlast.id, body: editedBody, subject: editedSubject })}
+            >
+              {blastsHook.updateBlastBody.isPending ? (
+                <><Loader2 className="mr-1.5 h-4 w-4 animate-spin" />Saving…</>
+              ) : 'Save draft'}
+            </Button>
+            <Button size="sm" variant="outline" disabled={drafting || polishing} onClick={onRegenerateClick}>
+              {drafting ? (
+                <><Loader2 className="mr-1.5 h-4 w-4 animate-spin" />Regenerating…</>
+              ) : (
+                <><Sparkles className="mr-1.5 h-4 w-4" />Regenerate</>
+              )}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={!canPolish(editedBody, drafting || polishing)}
+              onClick={onPolishClick}
+            >
+              {polishing ? (
+                <><Loader2 className="mr-1.5 h-4 w-4 animate-spin" />Polishing…</>
+              ) : (
+                <><Sparkles className="mr-1.5 h-4 w-4" />Polish</>
+              )}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={!hasBlastBodyContent(editedBody) || drafting || polishing || blastsHook.updateBlastBody.isPending || blastsHook.testSendBlast.isPending}
+              onClick={onTestSendClick}
+            >
+              {blastsHook.testSendBlast.isPending ? (
+                <><Loader2 className="mr-1.5 h-4 w-4 animate-spin" />Sending test…</>
+              ) : (
+                <><Send className="mr-1.5 h-4 w-4" />Send a test to me</>
+              )}
+            </Button>
+            <Button size="sm" className="ml-auto" disabled={!hasBlastBodyContent(editedBody) || drafting || polishing || blastsHook.updateBlastBody.isPending || recipientsLoading} onClick={onSendClick}>
+              {recipientsLoading ? (
+                <><Loader2 className="mr-1.5 h-4 w-4 animate-spin" />Checking…</>
+              ) : (
+                <><Mail className="mr-1.5 h-4 w-4" />Send to doctors</>
+              )}
+            </Button>
+          </div>
 
-      <RecipientReviewDialog
-        open={reviewOpen}
-        onOpenChange={setReviewOpen}
-        subject={editedSubject}
-        recipients={recipients}
-        excludedIds={excludedIds}
-        onExcludedIdsChange={setExcludedIds}
-        includedCount={includedCount}
-        sending={blastsHook.sendBlast.isPending}
-        onConfirm={confirmSend}
+          {/* LRM-12: a quiet way to abandon a targeted draft -- plain text,
+              not a filled/destructive button, so it doesn't compete with
+              the toolbar's real actions. */}
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={() => setDiscardConfirmOpen(true)}
+              className="text-2xs font-semibold text-muted-foreground underline-offset-2 hover:underline"
+            >
+              Discard draft
+            </button>
+          </div>
+
+          <AlertDialog open={regenConfirmOpen} onOpenChange={setRegenConfirmOpen}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Replace the current draft?</AlertDialogTitle>
+                <AlertDialogDescription>Your edits will be lost.</AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={() => { setRegenConfirmOpen(false); openSourcePicker('Regenerate'); }}>Replace</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+
+          <AlertDialog open={discardConfirmOpen} onOpenChange={setDiscardConfirmOpen}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Discard this draft?</AlertDialogTitle>
+                <AlertDialogDescription>This cannot be undone.</AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Keep editing</AlertDialogCancel>
+                <AlertDialogAction onClick={onDiscardConfirm}>Discard</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+
+          <RecipientReviewDialog
+            open={reviewOpen}
+            onOpenChange={setReviewOpen}
+            subject={editedSubject}
+            recipients={recipients}
+            excludedIds={excludedIds}
+            onExcludedIdsChange={setExcludedIds}
+            includedCount={includedCount}
+            sending={blastsHook.sendBlast.isPending}
+            onConfirm={confirmSend}
+          />
+        </div>
+      ) : (
+        <div className="rounded-lg border border-dashed py-8 text-center text-sm text-muted-foreground">
+          <Mail className="mx-auto mb-2 h-6 w-6 text-muted-foreground" />
+          {/* W3: explain what a draft draws from instead of a bare disabled
+              button -- only needed the first time, before anything has been
+              sent yet. */}
+          {sentBlasts.length === 0 && (
+            <p className="text-xs text-muted-foreground">Drafts from this week's focus and meeting.</p>
+          )}
+          <div className="mt-3">
+            <Button disabled={!canStartDraft || drafting} onClick={() => openSourcePicker('Draft blast')}>
+              {drafting ? (
+                <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Drafting…</>
+              ) : (
+                <><Sparkles className="mr-1.5 h-4 w-4" />{sentBlasts.length > 0 ? 'New blast' : 'Draft blast'}</>
+              )}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      <SourcePickerDialog
+        open={sourcePickerOpen}
+        onOpenChange={setSourcePickerOpen}
+        hasPublishedFocus={hasPublishedFocus}
+        meetings={weekMeetings}
+        state={sourceState}
+        onToggleFocus={() => setSourceState((s) => toggleFocusSource(s))}
+        onToggleMeeting={(id) => setSourceState((s) => toggleMeetingSource(s, id))}
+        confirmLabel={sourcePickerLabel}
+        confirming={drafting}
+        onConfirm={onConfirmSourcePicker}
       />
     </div>
+  );
+}
+
+/**
+ * LRM-12: the source picker shown before a brand-new draft or a Regenerate
+ * call. Lists the week's published focus (if any) and each logged meeting,
+ * labeled by its date, all checked by default. The confirm button disables
+ * once every source is unchecked -- at least one must stay checked (spec
+ * "Decisions locked").
+ */
+function SourcePickerDialog({
+  open, onOpenChange, hasPublishedFocus, meetings, state, onToggleFocus, onToggleMeeting, confirmLabel, confirming, onConfirm,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  hasPublishedFocus: boolean;
+  meetings: LeadMeetingRow[];
+  state: DraftSourceState;
+  onToggleFocus: () => void;
+  onToggleMeeting: (meetingId: string) => void;
+  confirmLabel: string;
+  confirming: boolean;
+  onConfirm: () => void;
+}) {
+  const canConfirm = hasAnySourceChecked(state);
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>What should this draft include?</DialogTitle>
+          <DialogDescription>Uncheck a source to leave it out. At least one has to stay checked.</DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-2">
+          {hasPublishedFocus && (
+            <div className="flex items-center gap-2 rounded-lg border p-2.5">
+              <Checkbox id="source-focus" checked={state.focusChecked} onCheckedChange={onToggleFocus} />
+              <Label htmlFor="source-focus" className="text-sm">This week's published focus</Label>
+            </div>
+          )}
+          {meetings.map((m) => (
+            <div key={m.id} className="flex items-center gap-2 rounded-lg border p-2.5">
+              <Checkbox
+                id={`source-meeting-${m.id}`}
+                checked={state.checkedMeetingIds.has(m.id)}
+                onCheckedChange={() => onToggleMeeting(m.id)}
+              />
+              <Label htmlFor={`source-meeting-${m.id}`} className="text-sm">Meeting: {formatDateForDisplay(m.meeting_date)}</Label>
+            </div>
+          ))}
+        </div>
+
+        {!canConfirm && <p className="text-xs text-muted-foreground">Check at least one source to draft from.</p>}
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button disabled={!canConfirm || confirming} onClick={onConfirm}>
+            {confirming ? (
+              <><Loader2 className="mr-1.5 h-4 w-4 animate-spin" />Drafting…</>
+            ) : confirmLabel}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -901,14 +1078,16 @@ function RecipientReviewDialog({
   onConfirm: () => void;
 }) {
   const groups = groupRecipientsByLocation(recipients);
-  const everyoneIncluded = isEveryoneIncluded(excludedIds, recipients);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex max-h-[85vh] flex-col overflow-hidden sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Send to doctors</DialogTitle>
-          <DialogDescription>Review who this goes to before sending. It cannot be sent twice.</DialogDescription>
+          {/* LRM-12: names the live included count instead of the old
+              "It cannot be sent twice" (no longer true -- another blast can
+              follow this one). */}
+          <DialogDescription>{buildSendConfirmBody(includedCount)}</DialogDescription>
         </DialogHeader>
 
         <div className="rounded-lg border bg-muted/30 p-2.5">
@@ -916,14 +1095,20 @@ function RecipientReviewDialog({
           <p className="text-sm font-semibold">{subject}</p>
         </div>
 
+        {/* LRM-12: explicit Select all / Select none, replacing the old
+            single "Everyone" checkbox -- from a partial selection (some
+            doctors excluded, some not) a single toggle can't tell "go to
+            all" and "go to none" apart without a second click, which is
+            exactly the two-doctor-send case this ticket adds. */}
         <div className="flex items-center justify-between rounded-lg border px-3 py-2">
-          <div className="flex items-center gap-2">
-            <Checkbox
-              id="blast-everyone"
-              checked={everyoneIncluded}
-              onCheckedChange={() => onExcludedIdsChange(toggleAllExclusion(excludedIds, recipients))}
-            />
-            <Label htmlFor="blast-everyone" className="text-sm font-semibold">Everyone</Label>
+          <div className="flex items-center gap-1">
+            <Button variant="ghost" size="sm" className="h-7 px-2 text-xs font-semibold" onClick={() => onExcludedIdsChange(selectAllRecipients())}>
+              Select all
+            </Button>
+            <span className="text-muted-foreground">·</span>
+            <Button variant="ghost" size="sm" className="h-7 px-2 text-xs font-semibold" onClick={() => onExcludedIdsChange(selectNoRecipients(recipients))}>
+              Select none
+            </Button>
           </div>
           <span className="text-xs font-semibold text-muted-foreground">{buildSendingSummary(recipients.length, excludedIds.size)}</span>
         </div>

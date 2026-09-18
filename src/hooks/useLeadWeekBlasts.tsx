@@ -104,11 +104,24 @@ export function useLeadWeekBlasts() {
       toast({ title: "Couldn't discard the draft", description: e?.message ?? 'Please try again.', variant: 'destructive' }),
   });
 
-  /** Calls the lead-week-blast edge function's "draft" action. Does not write to the DB -- the caller saves the returned body/subject. */
+  /**
+   * Calls the lead-week-blast edge function's "draft" action. Does not write
+   * to the DB -- the caller saves the returned body/subject.
+   *
+   * LRM-12: `includeFocus`/`meetingIds` carry the source picker's selection
+   * through to the edge function's `include_focus`/`meeting_ids` fields
+   * (see handleDraft in supabase/functions/lead-week-blast/index.ts). Always
+   * sent explicitly (never omitted) so an empty meetingIds array reads as
+   * "focus-only, on purpose" rather than "not specified, use every
+   * meeting" -- the edge function's parseDraftSourceSelection treats those
+   * two cases differently.
+   */
   const generateDraft = useMutation({
-    mutationFn: async (weekStartDate: string): Promise<{ body: string; subject: string }> => {
+    mutationFn: async (
+      { weekStartDate, includeFocus, meetingIds }: { weekStartDate: string; includeFocus: boolean; meetingIds: string[] },
+    ): Promise<{ body: string; subject: string }> => {
       const { data, error } = await supabase.functions.invoke('lead-week-blast', {
-        body: { action: 'draft', week_start_date: weekStartDate },
+        body: { action: 'draft', week_start_date: weekStartDate, include_focus: includeFocus, meeting_ids: meetingIds },
       });
       if (error) throw error;
       const body = (data as any)?.body;
