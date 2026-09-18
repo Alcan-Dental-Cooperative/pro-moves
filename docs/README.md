@@ -242,11 +242,12 @@ committed to version control**, so they have no git history and DOC-5 could not
 move them. They are all business material and belong in `docs/business/` when they
 are committed:
 
-- `alcan-avenue-patient-journey.md` and `alcan-avenue-patient-journey-review-draft.md`
-- `outbound/patient-journey-review-email.md`, `outbound/cd-update-regional-coaching-email.md`,
-  `outbound/Alcan-Avenue-Patient-Journey-Draft.docx`
-- `reference/alcan-manager-kpi-scorecard-q2-2026-template.csv`,
-  `reference/baseline-review-session-template.md`
+- `outbound/cd-update-regional-coaching-email.md`
+- `reference/baseline-review-session-template.md`
+
+The Avenue rollout material (patient journey, training day docs, outbound
+drafts, the manager scorecard template) moved on 2026-09-18 to the private
+`Alcan-Dental-Cooperative/avenue` repo, locally at `~/dev/alcan/avenue`.
 
 The tracked `docs/outbound/` and `docs/reference/` folders no longer exist. If
 those folders still appear in a working copy, it is only because of the
