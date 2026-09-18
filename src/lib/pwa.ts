@@ -7,6 +7,10 @@
 const LOCAL_FLAG_KEY = 'pwa_v1';
 const DEVICE_OPTOUT_KEY = 'pwa_device_optout';
 const BANNER_DISMISSED_KEY = 'pwa_banner_dismissed';
+const INSTALLED_NUDGE_SNOOZE_KEY = 'pwa_installed_nudge_snooze_until';
+
+/** How long "Continue in browser" quiets the already-installed nudge. */
+export const INSTALLED_NUDGE_SNOOZE_DAYS = 7;
 
 let registered = false;
 let updateServiceWorker: ((reloadPage?: boolean) => Promise<void>) | null = null;
@@ -119,6 +123,49 @@ export function dismissBanner(): void {
   } catch {
     /* storage unavailable — nothing to do */
   }
+}
+
+/**
+ * Snooze state for the "you've already installed the app" nudge shown to
+ * confirmed-installed users browsing on their phone anyway. Unlike the
+ * install banner's permanent dismissal, this one recurs: the goal is a
+ * gentle periodic reminder, and there is no persistent menu fallback for
+ * "go back to your installed app".
+ */
+export function isInstalledNudgeSnoozed(now: number = Date.now()): boolean {
+  try {
+    const raw = localStorage.getItem(INSTALLED_NUDGE_SNOOZE_KEY);
+    if (!raw) return false;
+    const until = Number(raw);
+    return Number.isFinite(until) && now < until;
+  } catch {
+    return false;
+  }
+}
+
+export function snoozeInstalledNudge(now: number = Date.now()): void {
+  try {
+    localStorage.setItem(
+      INSTALLED_NUDGE_SNOOZE_KEY,
+      String(now + INSTALLED_NUDGE_SNOOZE_DAYS * 24 * 60 * 60 * 1000),
+    );
+  } catch {
+    /* storage unavailable — nothing to do */
+  }
+}
+
+/**
+ * Pure selection of whether to show the already-installed nudge instead of
+ * the install banner. Device opt-out is not an input because PwaManager
+ * already gates all PWA surfaces on isPwaActive(), which includes it.
+ */
+export function shouldShowInstalledNudge(opts: {
+  installConfirmed: boolean;
+  standalone: boolean;
+  isMobile: boolean;
+  snoozed: boolean;
+}): boolean {
+  return opts.installConfirmed && !opts.standalone && opts.isMobile && !opts.snoozed;
 }
 
 export type InstallPathway = 'ios-safari' | 'ios-other-browser' | 'android-prompt' | 'manual';
