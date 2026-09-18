@@ -25,7 +25,38 @@ conversation and holds a transcript; this session folds it in.
   move (LRM-12 published post-move). The repo is still PUBLIC though.
 
 ## Next
-1. John pastes the Bobby conversation transcript. Read it, then:
+1. **FIRST, its own short session: move Avenue out of the public repo.**
+   John's call, 2026-09-18: Avenue training and implementation docs are client
+   rollout material, not app code, and the pro-moves repo must stay public
+   (flipping it private forces a Lovable plan upgrade). The move:
+   - Create `~/Documents/projects/alcan-avenue` as its own git repo with a
+     PRIVATE GitHub remote under Alcan-Dental-Cooperative (private repos are
+     free there; this repo never touches Lovable). Flat lowercase-hyphen name
+     per John's naming conventions.
+   - Move into it, from this branch: the four `docs/alcan-avenue-*.md` files,
+     `docs/outbound/bobby-meeting-questions.md`,
+     `docs/outbound/patient-journey-review-email.md`,
+     `docs/outbound/Alcan-Avenue-Patient-Journey-Draft.docx`,
+     `docs/reference/alcan-manager-kpi-scorecard-q2-2026-template.csv`,
+     and this session-state.md (it becomes the new repo's baton). Fix any
+     dangling references in `docs/README.md`.
+   - Give the new repo a short README/CLAUDE.md: what Pro Moves is as a
+     concept, pointer to the app repo, and what this repo holds. Run
+     `c0 init --namespace alcan-avenue` in its root, then `c0 move` the
+     Avenue concepts (`Avenue training day 2026-10-06`,
+     `Alcan Avenue UK expansion`) from skill-flow-pro into it.
+   - Then clean pro-moves: PR to main deleting the journey docs and .docx
+     from `docs/` (John merges), delete the `docs/avenue-training-day`
+     branch locally AND on origin (never merged, so this removes the agenda,
+     flow map and one-pager from public view), and
+     `git worktree remove ~/Documents/projects/pro-moves-avenue`.
+   - Honesty note, John has seen this: main's git HISTORY still contains the
+     journey doc and its figures. A true scrub means rewriting history, which
+     we are deliberately NOT doing while Lovable is attached. Accepted risk
+     until the hosting consolidation removes Lovable from the loop.
+   - Checkpoint into the new repo and clear. Transcript work starts fresh in
+     `alcan-avenue`.
+2. Then, in the new folder: John pastes the Bobby transcript. Read it, then:
    - fill every ⟨TBD⟩ casting slot and pick the contingency variants in the
      agenda (the nine questions in the one-pager are the extraction checklist);
    - probe the transcript for the contracts-and-roles specifics. The only
@@ -33,7 +64,7 @@ conversation and holds a transcript; this session folds it in.
      John half-remembers Bobby reviewing the manager KPIs himself, adjusting
      them, then showing Abbie; UNVERIFIED, confirm or kill it from the
      transcript and capture the answer.
-2. Get John's verdict on the four flow-map checks (bottom of
+3. Get John's verdict on the four flow-map checks (bottom of
    `docs/alcan-avenue-patient-flow-map.md`: roles vs names, keep the two
    numbers, prop vs permanent, altitude/Q14 wording). Then build the flow-map
    artifact.
@@ -47,12 +78,9 @@ conversation and holds a transcript; this session folds it in.
 
 ## Open questions
 - The four flow-map checks (above), John's call.
-- The Avenue docs are only on this branch, not on main. When John is ready:
-  push, open a PR, he merges on GitHub.
-- Repo visibility: Alcan-Dental-Cooperative/pro-moves is still PUBLIC (checked
-  2026-09-18), with staff names and revenue figures in these docs. Flipping it
-  private is a repo Settings toggle and does not affect Lovable. Needs John's
-  yes, then whoever needs read access gets added.
+- None new. The repo-visibility worry is resolved by Next step 1: pro-moves
+  stays public (private forces a Lovable upgrade), the sensitive Avenue docs
+  leave it instead.
 
 ## Do not re-derive
 - Journey v0.3 is agreed, not draft. Source tags and CU anchors live in the
