@@ -115,7 +115,7 @@ export function MeetingsAndFocusTab() {
   const openBuilder = (monday: string) => {
     const w = weeksByDate.get(monday);
     const initialItems = (w?.items ?? []).map((it) => ({
-      key: nextKey(), text: it.text, sourceId: it.source_issue_id, sourceTitle: it.sourceIssueTitle ?? null, aiPolished: true,
+      key: nextKey(), text: it.text, sourceId: it.source_issue_id, sourceTitle: it.sourceIssueTitle ?? null, aiPolished: false,
     }));
     setItems(initialItems);
     setFraming(w?.framing ?? '');
@@ -326,7 +326,7 @@ export function MeetingsAndFocusTab() {
             onSuccess: () => toast({ title: 'Meeting saved' }),
           })}
           onUpdateSummary={(input) => meetingsHook.updateMeeting.mutate(input, {
-            onSuccess: () => toast({ title: 'Summary saved' }),
+            onSuccess: () => { toast({ title: 'Summary saved' }); setMeetingDialog(null); },
           })}
           onAddIssue={(input) => ws.createIssue.mutate(input)}
         />
