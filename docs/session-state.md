@@ -1,4 +1,4 @@
-# Session state — 2026-09-18
+# Session state — 2026-09-18 (rev 2, post live test)
 
 ## The job
 Build and ship the multiple-blasts-per-week feature: LRM-11 (backend) and
@@ -24,10 +24,11 @@ docs/specs/lrm-11-multi-blast-week.md.
   merged; /status will sync it to stage:merged).
 
 ## Next
-- Waiting on John: review PR #123, walk the 8-step acceptance script on
-  the Lovable branch preview (stop at the send confirm, never complete
-  a real Send; Test send is the safe path), merge, switch Lovable to
-  main, Publish.
+- John merges PR #123 (agreed 2026-09-18): he live-tested discard +
+  source picker + targeted draft on localhost and both worked; QA
+  covers the rest. Merge order: switch Lovable back to main FIRST
+  (it is currently on the feature branch), merge on GitHub, confirm
+  Lovable re-syncs, Publish. No DB or edge fn steps.
 - Then: /spec LRM-13 composer-first (John locked the direction
   2026-09-18, second pass):
   1. "Draft blast" opens a BLANK composer, no auto-generation. She
@@ -52,6 +53,10 @@ docs/specs/lrm-11-multi-blast-week.md.
      labels day abbrev + date + title ("Fri 9/14 · Meeting with
      Jenny"). Reverses Ariyana's 2026-09-14 decline (picker needs
      disambiguation); keep optional, mention to her.
+  7. Relocate the Discard draft action: John live-tested it 2026-09-18
+     and called the current quiet bottom placement "essentially
+     invisible". Give it an obvious home in the redesigned composer
+     (still quiet relative to Send, but findable).
   Polish unchanged. Builds on top of merged PR #123.
 - If John reports a script failure on #123, open a fix branch off
   feature/lrm-12-multi-blast-ui scope, not a rebuild.
@@ -85,3 +90,9 @@ docs/specs/lrm-11-multi-blast-week.md.
 - The PR #116 WYSIWYG guarantee (send the visible text or be disabled)
   is intact in LRM-12; needsSaveBeforeSend in leadWeekBlastHtml.ts is
   the mechanism.
+- Mid-test mystery resolved 2026-09-18: LRM-12 features "missing" in
+  John's testing were because the LOCAL checkout got switched to main
+  by a parallel session in the same folder while the dev server ran.
+  The folder's checked-out branch is shared by every tab/session; use
+  a worktree for parallel sessions. John understands this now but
+  narrate branch mechanics plainly when it comes up.
