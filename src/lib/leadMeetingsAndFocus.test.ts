@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   deriveMeetingWeekStart, deriveFocusSlotState, deriveMeetingSlotState,
-  meetingsInWeek, isTranscriptLongEnough, MIN_TRANSCRIPT_LENGTH,
+  meetingsInWeek, isTranscriptLongEnough, MIN_TRANSCRIPT_LENGTH, formatMeetingLabel,
 } from './leadMeetingsAndFocus';
 import type { HydratedFocusWeek } from '@/types/leadFocus';
 import type { LeadMeetingRow } from '@/types/leadMeetings';
@@ -58,7 +58,7 @@ function meeting(overrides: Partial<LeadMeetingRow> = {}): LeadMeetingRow {
   return {
     id: 'm1', organization_id: 'org1', created_by: 'staff1',
     meeting_date: '2026-08-11', week_start_date: '2026-08-10',
-    raw_transcript: 'raw', internal_summary: 'summary',
+    raw_transcript: 'raw', internal_summary: 'summary', title: null,
     created_at: '2026-08-11T12:00:00Z', updated_at: '2026-08-11T12:00:00Z',
     ...overrides,
   };
@@ -108,5 +108,43 @@ describe('isTranscriptLongEnough', () => {
   it('accepts a transcript at or above the minimum length', () => {
     expect(isTranscriptLongEnough('x'.repeat(MIN_TRANSCRIPT_LENGTH))).toBe(true);
     expect(isTranscriptLongEnough('  ' + 'x'.repeat(MIN_TRANSCRIPT_LENGTH) + '  ')).toBe(true);
+  });
+});
+
+// LRM-13: '2026-08-10' is a Monday (pinned by deriveMeetingWeekStart's own
+// tests above), so '2026-08-14' is that week's Friday -- used here for a
+// stable, known day-of-week without hardcoding a date far from other tests
+// in this file.
+describe('formatMeetingLabel', () => {
+  it('renders day abbreviation + short date with no title', () => {
+    expect(formatMeetingLabel('2026-08-14', null)).toBe('Fri 8/14');
+  });
+
+  it('appends the title after a middle dot when present', () => {
+    expect(formatMeetingLabel('2026-08-14', 'Meeting with Jenny')).toBe('Fri 8/14 · Meeting with Jenny');
+  });
+
+  it('treats undefined the same as null (no title)', () => {
+    expect(formatMeetingLabel('2026-08-14', undefined)).toBe('Fri 8/14');
+  });
+
+  it('treats a whitespace-only title as absent (no placeholder, no trailing dot)', () => {
+    expect(formatMeetingLabel('2026-08-14', '   ')).toBe('Fri 8/14');
+  });
+
+  it('trims surrounding whitespace on a real title', () => {
+    expect(formatMeetingLabel('2026-08-14', '  Meeting with Jenny  ')).toBe('Fri 8/14 · Meeting with Jenny');
+  });
+
+  it('does not zero-pad the day-of-month (matches the "9/14" style in the spec, not "09/14")', () => {
+    expect(formatMeetingLabel('2026-08-05', null)).toBe('Wed 8/5');
+  });
+
+  it('disambiguates two same-day meetings by their titles', () => {
+    const a = formatMeetingLabel('2026-08-14', 'Morning huddle');
+    const b = formatMeetingLabel('2026-08-14', 'Afternoon follow-up');
+    expect(a).not.toBe(b);
+    expect(a).toBe('Fri 8/14 · Morning huddle');
+    expect(b).toBe('Fri 8/14 · Afternoon follow-up');
   });
 });

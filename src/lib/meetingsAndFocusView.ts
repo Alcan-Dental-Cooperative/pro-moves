@@ -94,19 +94,15 @@ export interface BuilderFieldSnapshot {
   framing: string;
 }
 
-export interface BuilderCurrentFields extends BuilderFieldSnapshot {
-  /** The not-yet-added text in the "write your own" input. */
-  ownDraft: string;
-}
-
 /**
  * B3: whether the open Builder has unsaved edits relative to the snapshot
- * taken when it was opened (the published/saved state at that time). Any
- * typed-but-unadded "own" text, a changed framing note, or any changed/
- * added/removed item counts as dirty.
+ * taken when it was opened (the published/saved state at that time). A
+ * changed framing note or any changed/added/removed item counts as dirty.
+ * (The separate "write your own" input, and its ownDraft field here, were
+ * removed 2026-09-18 -- writing your own now happens in the item slots
+ * themselves, so it is covered by the items comparison.)
  */
-export function isBuilderDirty(current: BuilderCurrentFields, snapshot: BuilderFieldSnapshot): boolean {
-  if (current.ownDraft.trim() !== '') return true;
+export function isBuilderDirty(current: BuilderFieldSnapshot, snapshot: BuilderFieldSnapshot): boolean {
   if (current.framing.trim() !== snapshot.framing.trim()) return true;
   if (current.items.length !== snapshot.items.length) return true;
   return current.items.some((item, i) => {

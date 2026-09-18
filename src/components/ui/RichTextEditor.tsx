@@ -86,6 +86,14 @@ export interface RichTextEditorProps {
    * additive: existing callers that don't pass it are unaffected.
    */
   onReady?: (html: string) => void;
+  /**
+   * LRM-13: fires when the editor loses focus (Quill's 'selection-change'
+   * event with a null range), for callers that need a "flush now" moment --
+   * e.g. the doctor-blast composer's debounced autosave, which otherwise
+   * only commits after the idle timer. Optional and additive: existing
+   * callers that don't pass it are unaffected.
+   */
+  onBlur?: () => void;
 }
 
 export function RichTextEditor({
@@ -97,6 +105,7 @@ export function RichTextEditor({
   readOnly = false,
   className,
   onReady,
+  onBlur,
 }: RichTextEditorProps) {
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const quillRef = useRef<Quill | null>(null);
@@ -110,6 +119,10 @@ export function RichTextEditor({
   // Latest onReady, same rebind-avoidance reasoning as onChangeRef.
   const onReadyRef = useRef(onReady);
   onReadyRef.current = onReady;
+
+  // Latest onBlur, same rebind-avoidance reasoning as onChangeRef.
+  const onBlurRef = useRef(onBlur);
+  onBlurRef.current = onBlur;
 
   // Tracks the HTML we last set into (or read out of) the editor, so the
   // controlled-value effect below can tell "the parent echoed our own
@@ -168,6 +181,15 @@ export function RichTextEditor({
     };
     quill.on('text-change', handleTextChange);
 
+    // LRM-13: null range means focus left the editor entirely (clicking
+    // away, tabbing out) -- Quill also fires this with a real range on
+    // every click/caret move inside the editor, so onBlur only fires on the
+    // null-range case, never on ordinary typing or clicking around.
+    const handleSelectionChange = (range: unknown) => {
+      if (!range) onBlurRef.current?.();
+    };
+    quill.on('selection-change', handleSelectionChange);
+
     // Seed initial content through the same silent path the value-sync
     // effect below uses. Both effects run after this first render (React
     // runs every effect once on mount regardless of dependency arrays), so
@@ -184,6 +206,7 @@ export function RichTextEditor({
 
     return () => {
       quill.off('text-change', handleTextChange);
+      quill.off('selection-change', handleSelectionChange);
       quillRef.current = null;
       // Quill has no destroy() API (true in v1 and v2 alike), and its
       // toolbar lives outside the container element we gave it (see

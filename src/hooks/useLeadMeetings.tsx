@@ -47,6 +47,7 @@ export function useLeadMeetings() {
           week_start_date: input.weekStartDate,
           raw_transcript: input.rawTranscript || null,
           internal_summary: input.internalSummary || null,
+          title: input.title?.trim() || null,
         })
         .select()
         .single();
@@ -59,10 +60,10 @@ export function useLeadMeetings() {
   });
 
   const updateMeeting = useMutation({
-    mutationFn: async ({ id, internalSummary }: UpdateLeadMeetingInput) => {
+    mutationFn: async ({ id, internalSummary, title }: UpdateLeadMeetingInput) => {
       const { error } = await sb
         .from('lead_meetings')
-        .update({ internal_summary: internalSummary, updated_at: new Date().toISOString() })
+        .update({ internal_summary: internalSummary, title: title?.trim() || null, updated_at: new Date().toISOString() })
         .eq('id', id);
       if (error) throw error;
     },

@@ -1,87 +1,80 @@
-# Session state — 2026-09-18
+# Session state — 2026-09-18 (rev 3, LRM-13 shipped to review)
 
 ## The job
-Build and ship the multiple-blasts-per-week feature: LRM-11 (backend) and
-LRM-12 (UI), both from the approved spec at
-docs/specs/lrm-11-multi-blast-week.md.
+Spec, build, QA, and ship LRM-13 (composer-first blast editor) after PR #123
+(LRM-12) merged this morning.
 
 ## Done
-- LRM-11 built, QA PASS, PR #122 merged by John. Backend is fully LIVE:
-  migration 20260917160000 applied to prod (verified: week unique
-  constraint gone, one-open-draft partial index in place) and
-  lead-week-blast edge function v10 deployed via Supabase MCP.
-- LRM-12 built on feature/lrm-12-multi-blast-ui, fresh-eyes QA PASS,
-  PR #123 open and awaiting John's Gate 2 (merge + Lovable Publish).
-  All five spec items: blast stack + New blast button, source picker,
-  discard draft, "2 sent" badge / list-aware month view, Select all/none
-  recipients with live-count confirm copy.
-- QA fixes applied on both branches before shipping: LRM-11 malformed
-  payloads now 400 instead of coercing; LRM-12 got a synchronous ref
-  guard against double-click double-draft and a neutral stale-draft
-  message ("sent or discarded").
-- Motion tickets: LRM-11 tk_LdZD7MGpr55WMfdv5gugpk and LRM-12
-  tk_azGFnf7UCeGoGiXP7vRmJA both at stage:ready-to-review (LRM-11 is
-  merged; /status will sync it to stage:merged).
+- Spec written and approved (Gate 1, John, 2026-09-18):
+  docs/specs/lrm-13-composer-first.md. All 7 locked decisions plus one
+  addition made during review: a save-state indicator that tracks DIRTY
+  STATE not the network request (muted "Saving…" while typing, one flip to
+  green "Saved" per pause, "Not saved" on failure).
+- Built by kit-builder on feature/lrm-13-composer-first (3 commits), then
+  fresh-eyes QA PASS, then 3 QA fixes applied in a 4th commit (discard
+  cancels the pending autosave timer, discard confirm gets a re-entry
+  guard, blastTemplate.ts rejects nested/duplicated AI delimiters). Final
+  gate green: 1201/1201 tests, clean build.
+- PR #127 open, awaiting John's Gate 2:
+  https://github.com/Alcan-Dental-Cooperative/pro-moves/pull/127
+- Backend pre-deployed to prod per the approved spec's ordering (both
+  backward compatible with the published app): lead_meetings.title column
+  applied and verified; lead-week-blast edge function v11 deployed via
+  Supabase MCP (index.ts + blastTemplate.ts + draftValidation.ts +
+  htmlUtils.ts, verify_jwt true). Until Publish, the only visible prod
+  change is that generated drafts use the new "Hey there!" template.
+- Motion ticket tk_eBvzAvx6ifqPZbewGWoYxh at stage:ready-to-review.
+- Dev server started for John's local testing: npm run dev on the feature
+  branch, http://localhost:8080 (talks to real prod DB + edge fn v11).
 
 ## Next
-- Waiting on John: review PR #123, walk the 8-step acceptance script on
-  the Lovable branch preview (stop at the send confirm, never complete
-  a real Send; Test send is the safe path), merge, switch Lovable to
-  main, Publish.
-- Then: /spec LRM-13 composer-first (John locked the direction
-  2026-09-18, second pass):
-  1. "Draft blast" opens a BLANK composer, no auto-generation. She
-     writes herself, or clicks "Summarize meeting".
-  2. Summarize opens a MEETINGS-ONLY modal (no focus checkbox; default
-     to the single meeting when only one exists). If the editor already
-     has text: confirm dialog "this will replace your text", then
-     REPLACE. Never append (John decided; overrides earlier lean).
-  3. Focus is ALWAYS part of the summary output, not a source option:
-     fixed template opens "Hey there! This week's Lead RDA Focus is:
-     {focus rephrased as complete plain-language aspirational
-     statement}", then "At this week's Lead RDA meeting, we discussed:
-     {bulleted summary of checked meetings}". Positioned so she can
-     delete the focus block easily in one-off weeks.
-  4. Two DELIBERATE prompt-rule reversals to state in the spec: the
-     greeting ban is lifted for this fixed template opener, and focus
-     items are REPHRASED (aspirational restatement), no longer quoted
-     verbatim.
-  5. Save draft button removed; debounced auto-save (save on idle +
-     blur). The PR #116 persist-before-send guarantee stays regardless.
-  6. Optional title on lead_meetings (nullable, additive migration);
-     labels day abbrev + date + title ("Fri 9/14 · Meeting with
-     Jenny"). Reverses Ariyana's 2026-09-14 decline (picker needs
-     disambiguation); keep optional, mention to her.
-  Polish unchanged. Builds on top of merged PR #123.
-- If John reports a script failure on #123, open a fix branch off
-  feature/lrm-12-multi-blast-ui scope, not a rebuild.
+- John is live-testing on localhost:8080 now and ALREADY HAS FEEDBACK AND
+  BUGS he will bring to the next session. First action next session: take
+  his list, reproduce each item against the code, and triage into
+  fix-on-this-branch (pre-merge, commits onto
+  feature/lrm-13-composer-first, PR #127 updates automatically) vs
+  follow-up ticket. Do not merge anything until his items are resolved or
+  explicitly deferred.
+- After his items clear: John walks the PR #127 checklist (merge on
+  GitHub, Lovable back on main, re-sync, Publish). No DB or edge fn steps
+  remain for him.
+- Then /status to sync the Motion board from GitHub state.
 
 ## Files that matter
-`docs/specs/lrm-11-multi-blast-week.md` — the approved spec for both tickets, incl. acceptance script
-`src/pages/training/MeetingsAndFocusTab.tsx` — all LRM-12 UI lives here (stack, picker, discard, recipient dialog)
-`src/lib/leadWeekBlastSources.ts` — source picker pure state (new in LRM-12)
-`src/lib/leadWeekBlasts.ts` — list-based slot state, countSentBlasts, badge labels
-`src/hooks/useLeadWeekBlasts.tsx` — generateDraft(includeFocus/meetingIds), deleteDraft
-`supabase/functions/lead-week-blast/draftValidation.ts` — strict payload parsing (deployed)
-`supabase/migrations/20260917160000_lrm11_multi_blast_week.sql` — applied to prod already, do not re-apply
+`docs/specs/lrm-13-composer-first.md` — approved spec incl. acceptance script and QA manual-test list
+`src/pages/training/MeetingsAndFocusTab.tsx` — composer, summarize modal, autosave wiring, discard
+`src/lib/leadWeekBlastSaveState.ts` — save indicator dirty-state derivation (pure, tested)
+`src/lib/leadMeetingsAndFocus.ts` — formatMeetingLabel ("Fri 9/14 · title")
+`supabase/functions/lead-week-blast/blastTemplate.ts` — fixed template assembly + delimiter extraction
+`supabase/functions/lead-week-blast/index.ts` — new draft/polish prompts (deployed as v11)
+`src/hooks/useLeadWeekBlasts.tsx` — createBlast/generateDraft/updateBlastBody/deleteDraft
+`supabase/migrations/20260918093000_lrm13_meeting_title.sql` — applied to prod already, do not re-apply
 
 ## Open questions
-- None for building. John's live checks that code QA could not do:
-  fast double-click the picker's Draft button (must not create two
-  drafts), and the discard-during-send window's toast copy.
+- John's live-test feedback and bug list (he has items already; contents
+  unknown until next session).
+- Mention to Ariyana: meetings now have an optional title field, reversing
+  her 2026-09-14 decline because the picker needs disambiguation.
 
 ## Do not re-derive
-- The LRM-11 backend is LIVE in prod and invisible until PR #123
-  publishes. Do not re-apply the migration or redeploy the function.
-- Kit gates clarified 2026-09-17: only two human gates (spec approval,
-  merge). Roll /build straight into /qa without asking John.
-- supabase CLI function deploy is permission-blocked in this harness;
-  use the Supabase MCP deploy_edge_function tool instead (pass index.ts
-  + draftValidation.ts + htmlUtils.ts, verify_jwt true).
-- Test send emails only the logged-in author, never doctors. QA hard
-  rule: never complete a real Send anywhere.
-- masquerade cannot see Ariyana's data (author-scoped RLS); QA authors
-  its own focus/meetings/blasts.
-- The PR #116 WYSIWYG guarantee (send the visible text or be disabled)
-  is intact in LRM-12; needsSaveBeforeSend in leadWeekBlastHtml.ts is
-  the mechanism.
+- The LRM-13 backend is LIVE in prod (title column + edge fn v11). Do not
+  re-apply the migration or redeploy the function unless code changes.
+- QA hard rules: test send emails only the author; never complete a real
+  Send; masquerade cannot see Ariyana's data (author-scoped RLS).
+- The PR #116 persist-before-send guarantee is intact; QA traced it end to
+  end including the type-then-Send race. needsSaveBeforeSend is the
+  backstop under the new autosave.
+- Kit gates: only two human gates (spec approval, merge). Roll /build into
+  /qa without asking.
+- Old "Regenerate" button was deliberately removed (Summarize + replace
+  confirm covers it); shouldConfirmRegenerate is orphaned-but-tested dead
+  code, left on purpose.
+- The guard hook blocks any Bash command containing both "push" and
+  "main", including innocent ones like `git log main..HEAD` chained after
+  a push. Split such commands.
+- The folder's checked-out branch is shared by every tab/session; it is on
+  feature/lrm-13-composer-first with John's dev server running from it.
+  Use a worktree for any parallel session, and do not switch this folder's
+  branch while he is testing.
+- supabase CLI deploy is permission-blocked in this harness; use the
+  Supabase MCP deploy_edge_function tool (worked fine for v11).

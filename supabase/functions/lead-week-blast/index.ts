@@ -3,6 +3,14 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { sanitizeBlastHtml, blastHtmlToPlainText, hasVisibleText, upgradeBlastBodyToHtml } from "./htmlUtils.ts";
 import { parseDraftSourceSelection, selectRequestedMeetings } from "./draftValidation.ts";
+import {
+  buildBlastBody,
+  extractTemplateSection,
+  FOCUS_SECTION_START,
+  FOCUS_SECTION_END,
+  MEETINGS_SECTION_START,
+  MEETINGS_SECTION_END,
+} from "./blastTemplate.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -250,54 +258,76 @@ async function handleDraft(admin: ReturnType<typeof createClient>, callerStaff: 
   const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
   if (!OPENAI_API_KEY) throw new Error('OPENAI_API_KEY is not configured');
 
-  const focusBlock = focusItems.length
-    ? focusItems.map((it, i) => `${i + 1}. "${it.text}"`).join('\n')
-    : '(no published focus this week -- draft a meeting-only recap instead)';
-  const framingLine = focusWeek?.framing ? `\nDirector's framing note for this focus: "${focusWeek.framing}"\n` : '';
-  const meetingBlock = transcripts.length
-    ? transcripts.map((t, i) => `--- Meeting transcript ${i + 1} ---\n${t}`).join('\n\n')
-    : '(no Lead RDA meeting was held this week -- draft a focus-only announcement)';
+  // LRM-13: the fixed template's literal wrapper text (the "Hey there!"
+  // greeting, the <strong> section headers, the "Have a great week!"
+  // sign-off) is emitted deterministically in code by buildBlastBody,
+  // never trusted to the model. The model is asked for exactly the two
+  // variable pieces this draft needs, each in its own delimited section, so
+  // its response can be parsed back apart rather than used as the whole
+  // body. Which sections are asked for is decided here, from what was
+  // actually loaded above -- not left for the model to infer.
+  const wantFocus = focusItems.length > 0;
+  const wantMeetings = transcripts.length > 0;
 
-  const systemPrompt = `# Role
-You are a Dental Training Director's assistant, drafting a weekly email from
-the director to every doctor in the organization, so doctors know what was
-set with their Lead RDAs this week.
+  const focusBlock = focusItems.map((it, i) => `${i + 1}. "${it.text}"`).join('\n');
+  const framingLine = focusWeek?.framing ? `\nDirector's framing note for this focus: "${focusWeek.framing}"\n` : '';
+  const meetingBlock = transcripts.map((t, i) => `--- Meeting transcript ${i + 1} ---\n${t}`).join('\n\n');
+
+  const systemPromptParts = [
+    `# Role
+You are a Dental Training Director's assistant. A fixed email template
+supplies its own wrapping sentences elsewhere -- you never write those. Your
+only job is to produce the content requested in the section(s) below, each
+inside its own exact markers, and nothing else.
 
 # Hard constraints
-- Lead with the week's focus items. Quote them VERBATIM, exactly as given in
-  the "This week's focus items" section below -- never paraphrase, reword, or
-  summarize them. Copy them word for word.
 - Never mention a named individual, anyone's performance, or any personnel
   matter of any kind, even if the meeting notes below name someone. If the
   notes reference a person, omit that detail entirely and describe only the
   process-level point being made.
 - No em dashes anywhere in the output.
-- Do not add a greeting line ("Dear Doctors," or similar) or a signature or
-  sign-off ("Best," "Thank you," or similar). Output only the body content.
-- Aim for roughly 120 words. Go longer only if the content genuinely needs
-  it to preserve every point -- never cut a point just to hit the target.
+- Output ONLY the section(s) requested below, each wrapped in its exact
+  markers, and nothing outside them -- no greeting, no sign-off, no
+  commentary, no extra sections, no markdown code fences.`,
+  ];
 
-# What to cover
-1. The week's focus items, quoted verbatim, as the lead section.
-2. Any process-level clarifications or expectations from the meeting notes
-   (what was discussed or decided about how things work), if meeting notes
-   are provided, under a label line such as "From this week's lead meeting:".
-   If no meeting was held, skip this section entirely.
+  if (wantFocus) {
+    systemPromptParts.push(`# Focus section
+Between ${FOCUS_SECTION_START} and ${FOCUS_SECTION_END}, write ONE complete,
+plain-language, aspirational sentence that rephrases the week's focus items
+given below in your own words. If there is more than one item, combine them
+into one flowing sentence. Never quote a focus item verbatim or reuse its
+exact wording -- restate the idea, do not copy it. Plain text only: no HTML
+tags, no bullet points, no quotation marks.`);
+  }
+
+  if (wantMeetings) {
+    systemPromptParts.push(`# Meetings section
+Between ${MEETINGS_SECTION_START} and ${MEETINGS_SECTION_END}, summarize the
+meeting notes given below at a process level: any clarifications or
+expectations about how things work that were discussed or decided.
 
 ${HTML_OUTPUT_RULES}
 
-# Style
-A short memo, not flowing prose. Organize under short bolded label lines
-(<strong>...</strong>), one per topic (e.g. this week's focus, meeting
-notes). Under each label, use a real bulleted list, one point per <li>.
-Start each bullet with the action, decision, or rule itself, never with
-framing filler ("we discussed the importance of", "it was underscored
-that"). Say "Include required screenshots in charts" not "RDAs are advised
-to continue including required screenshots". Warm, plain, professional word
-choice in the Alcan voice. Written to be read by a busy doctor in a
-15-second glance.`;
+Output a real <ul><li>...</li></ul> list, one point per <li>, no other tags
+and no label line before it. Start each bullet with the action, decision, or
+rule itself, never with framing filler ("we discussed the importance of",
+"it was underscored that"). Say "Include required screenshots in charts" not
+"RDAs are advised to continue including required screenshots". Warm, plain,
+professional word choice in the Alcan voice. Written to be read by a busy
+doctor in a 15-second glance.`);
+  }
 
-  const userContent = `This week's focus items (quote verbatim):\n${focusBlock}\n${framingLine}\nMeeting notes to summarize at a process level (exclude anything about named individuals):\n${meetingBlock}`;
+  const systemPrompt = systemPromptParts.join('\n\n');
+
+  const userContentParts: string[] = [];
+  if (wantFocus) {
+    userContentParts.push(`This week's focus items (rephrase, do not quote verbatim):\n${focusBlock}${framingLine}`);
+  }
+  if (wantMeetings) {
+    userContentParts.push(`Meeting notes to summarize at a process level (exclude anything about named individuals):\n${meetingBlock}`);
+  }
+  const userContent = userContentParts.join('\n\n');
 
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
@@ -324,15 +354,46 @@ choice in the Alcan voice. Written to be read by a busy doctor in a
   }
 
   const data = await response.json();
-  const rawBody = data.choices?.[0]?.message?.content?.trim() ?? '';
-  if (!rawBody) {
+  const rawResponse = data.choices?.[0]?.message?.content?.trim() ?? '';
+  if (!rawResponse) {
     return jsonResponse({ error: 'No draft produced' }, 502);
   }
-  // LRM-10: the prompt asks for constrained HTML directly, but sanitize
-  // regardless -- a model can ignore its own prompt's formatting rules, and
-  // this is the one gate every draft body passes through before a client
-  // ever sees it.
-  const body = sanitizeBlastHtml(stripCodeFence(rawBody));
+
+  // Pull each requested piece back out of its markers. A requested section
+  // the model failed to produce is treated as a generation failure (502)
+  // rather than silently rendered as an empty/missing block -- the caller
+  // asked for that source, so a draft missing it is not a valid result.
+  let focusSentence: string | null = null;
+  if (wantFocus) {
+    const raw = extractTemplateSection(stripCodeFence(rawResponse), FOCUS_SECTION_START, FOCUS_SECTION_END);
+    // Plain-text only: strip any stray tags the model added despite being
+    // told not to, rather than trusting it (buildBlastBody wraps this in
+    // its own <p>, so tags here would double-wrap or leak through escaped).
+    focusSentence = raw ? raw.replace(/<[^>]+>/g, '').trim() : null;
+    if (!focusSentence) {
+      return jsonResponse({ error: 'Draft generation failed' }, 502);
+    }
+  }
+
+  let meetingSummaryHtml: string | null = null;
+  if (wantMeetings) {
+    const raw = extractTemplateSection(stripCodeFence(rawResponse), MEETINGS_SECTION_START, MEETINGS_SECTION_END);
+    // LRM-10: the prompt asks for constrained HTML directly, but sanitize
+    // regardless -- a model can ignore its own prompt's formatting rules,
+    // and this is the one gate every draft body passes through before a
+    // client ever sees it.
+    meetingSummaryHtml = raw ? sanitizeBlastHtml(stripCodeFence(raw)) : null;
+    if (!meetingSummaryHtml || !meetingSummaryHtml.trim()) {
+      return jsonResponse({ error: 'Draft generation failed' }, 502);
+    }
+  }
+
+  // Final assembly happens entirely in code -- see buildBlastBody's own
+  // comment. Re-sanitized once more as a belt-and-braces pass over the
+  // fully assembled body (the literal wrapper text only ever uses allowed
+  // tags, so this is a no-op for it and only matters if the meeting summary
+  // somehow slipped something through above).
+  const body = sanitizeBlastHtml(buildBlastBody({ focusSentence, meetingSummaryHtml }));
   if (!body.trim()) {
     return jsonResponse({ error: 'No draft produced' }, 502);
   }
@@ -389,8 +450,16 @@ not to write new content.
   references a person, omit that detail entirely and describe only the
   process-level point being made.
 - No em dashes anywhere in the output.
-- Do not add a greeting line ("Dear Doctors," or similar) or a signature or
-  sign-off ("Best," "Thank you," or similar). Output only the body content.
+- Do not ADD a new greeting line ("Dear Doctors," or similar) or a
+  signature/sign-off ("Best," "Thank you," or similar) that is not already
+  in the input. LRM-13 exception: the fixed template opens with "Hey
+  there!" and closes with "Have a great week!" -- if either is already in
+  the input, KEEP it exactly where it is (opener as the first line,
+  sign-off as the last) -- do not strip, reword, or treat them as banned.
+- The input may already be organized under short bolded section header
+  lines (e.g. <strong>This week's Lead RDA Focus</strong>). Keep those
+  headers and the content grouped under them -- reorganizing under new
+  headers of your own is a failure.
 
 ${HTML_OUTPUT_RULES}
 

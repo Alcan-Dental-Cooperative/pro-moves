@@ -20,7 +20,7 @@ function meeting(overrides: Partial<LeadMeetingRow> = {}): LeadMeetingRow {
   return {
     id: 'm1', organization_id: 'org1', created_by: 'staff1',
     meeting_date: '2026-08-11', week_start_date: '2026-08-10',
-    raw_transcript: null, internal_summary: null,
+    raw_transcript: null, internal_summary: null, title: null,
     created_at: '2026-08-11T12:00:00Z', updated_at: '2026-08-11T12:00:00Z',
     ...overrides,
   };
@@ -135,37 +135,29 @@ describe('isBuilderDirty', () => {
   const snapshot = { items: [{ text: 'Item one', sourceId: null }], framing: 'Some framing' };
 
   it('is not dirty when current fields exactly match the snapshot', () => {
-    expect(isBuilderDirty({ items: [{ text: 'Item one', sourceId: null }], framing: 'Some framing', ownDraft: '' }, snapshot)).toBe(false);
-  });
-
-  it('is dirty when there is unsaved text in the "write your own" input', () => {
-    expect(isBuilderDirty({ items: snapshot.items, framing: snapshot.framing, ownDraft: 'half-typed idea' }, snapshot)).toBe(true);
-  });
-
-  it('ignores whitespace-only text in the "write your own" input', () => {
-    expect(isBuilderDirty({ items: snapshot.items, framing: snapshot.framing, ownDraft: '   ' }, snapshot)).toBe(false);
+    expect(isBuilderDirty({ items: [{ text: 'Item one', sourceId: null }], framing: 'Some framing' }, snapshot)).toBe(false);
   });
 
   it('is dirty when the framing note changed', () => {
-    expect(isBuilderDirty({ items: snapshot.items, framing: 'Different framing', ownDraft: '' }, snapshot)).toBe(true);
+    expect(isBuilderDirty({ items: snapshot.items, framing: 'Different framing' }, snapshot)).toBe(true);
   });
 
-  it('is dirty when an item was added', () => {
-    const items = [...snapshot.items, { text: 'Item two', sourceId: null }];
-    expect(isBuilderDirty({ items, framing: snapshot.framing, ownDraft: '' }, snapshot)).toBe(true);
+  it('is dirty when an item was added (including a blank write-your-own slot)', () => {
+    const items = [...snapshot.items, { text: '', sourceId: null }];
+    expect(isBuilderDirty({ items, framing: snapshot.framing }, snapshot)).toBe(true);
   });
 
   it('is dirty when an item was removed', () => {
-    expect(isBuilderDirty({ items: [], framing: snapshot.framing, ownDraft: '' }, snapshot)).toBe(true);
+    expect(isBuilderDirty({ items: [], framing: snapshot.framing }, snapshot)).toBe(true);
   });
 
   it('is dirty when an item\'s text changed', () => {
     const items = [{ text: 'Edited item one', sourceId: null }];
-    expect(isBuilderDirty({ items, framing: snapshot.framing, ownDraft: '' }, snapshot)).toBe(true);
+    expect(isBuilderDirty({ items, framing: snapshot.framing }, snapshot)).toBe(true);
   });
 
   it('is not dirty for a brand-new empty builder with an empty snapshot', () => {
     const emptySnapshot = { items: [], framing: '' };
-    expect(isBuilderDirty({ items: [], framing: '', ownDraft: '' }, emptySnapshot)).toBe(false);
+    expect(isBuilderDirty({ items: [], framing: '' }, emptySnapshot)).toBe(false);
   });
 });
