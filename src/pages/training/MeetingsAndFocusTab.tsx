@@ -505,6 +505,7 @@ function BlastSlot({
   const [editedBody, setEditedBody] = useState(upgradeBlastBodyToHtml(draftBlast?.body ?? ''));
   const [editedSubject, setEditedSubject] = useState(draftBlast?.subject || buildDefaultBlastSubject(weekStartDate));
   const [drafting, setDrafting] = useState(false);
+  const draftingRef = useRef(false);
   const [polishing, setPolishing] = useState(false);
   const [regenConfirmOpen, setRegenConfirmOpen] = useState(false);
   const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false);
@@ -644,6 +645,12 @@ function BlastSlot({
   // (include_focus / meeting_ids), gathered before this ever runs -- see
   // openSourcePicker / onConfirmSourcePicker below.
   const runDraft = async (selection: { includeFocus: boolean; meetingIds: string[] }) => {
+    // Synchronous re-entry guard: the `drafting` state that disables the
+    // picker's confirm button lags a render behind, so a fast double-click
+    // could otherwise fire two inserts and trip the one-draft-per-week
+    // unique index with a raw Postgres error.
+    if (draftingRef.current) return;
+    draftingRef.current = true;
     setDrafting(true);
     try {
       const { body, subject } = await blastsHook.generateDraft.mutateAsync({
@@ -664,6 +671,7 @@ function BlastSlot({
     } catch {
       // Failure toast already shown by the hook's onError.
     } finally {
+      draftingRef.current = false;
       setDrafting(false);
     }
   };

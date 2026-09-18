@@ -61,6 +61,8 @@ export function useLeadWeekBlasts() {
     mutationFn: async ({ id, body, subject }: UpdateLeadWeekBlastInput) => {
       // Seatbelt: only a draft may be edited. A stale tab that lost a send
       // race matches zero rows here instead of rewriting the sent record.
+      // Since LRM-11 a zero-row match can also mean the draft was discarded,
+      // so the message stays neutral about which one happened.
       const { data, error } = await sb
         .from('lead_week_blasts')
         .update({ body, subject, updated_at: new Date().toISOString() })
@@ -68,7 +70,7 @@ export function useLeadWeekBlasts() {
         .eq('status', 'draft')
         .select('id');
       if (error) throw error;
-      if (!data || data.length === 0) throw new Error('This blast was already sent, so the draft can no longer be edited.');
+      if (!data || data.length === 0) throw new Error('This draft is no longer editable. It may have been sent or discarded.');
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: KEY }),
     onError: (e: any) =>
