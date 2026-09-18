@@ -93,4 +93,29 @@ describe('extractTemplateSection', () => {
     const raw = `${MEETINGS_SECTION_START}\n  <ul><li>a</li></ul>  \n${MEETINGS_SECTION_END}`;
     expect(extractTemplateSection(raw, MEETINGS_SECTION_START, MEETINGS_SECTION_END)).toBe('<ul><li>a</li></ul>');
   });
+
+  // QA hardening: first-match indexOf extraction is exact for a
+  // well-formed response, but a pathological one that nests another
+  // section's markers inside this one would otherwise have them survive as
+  // ordinary text -- they aren't in the HTML tag allowlist, so
+  // sanitizeBlastHtml doesn't strip them and they'd reach a doctor's inbox
+  // as visible bracket text. Reject instead of emitting marker text.
+  it('rejects a section whose content nests another section\'s markers (pathological model response)', () => {
+    const raw = `${FOCUS_SECTION_START}intro ${MEETINGS_SECTION_START}bad<ul><li>x</li></ul>${MEETINGS_SECTION_END} outro${FOCUS_SECTION_END}`;
+    expect(extractTemplateSection(raw, FOCUS_SECTION_START, FOCUS_SECTION_END)).toBeNull();
+  });
+
+  it('rejects a section whose content contains a duplicated start tag', () => {
+    const raw = `${FOCUS_SECTION_START}first ${FOCUS_SECTION_START} second${FOCUS_SECTION_END}`;
+    expect(extractTemplateSection(raw, FOCUS_SECTION_START, FOCUS_SECTION_END)).toBeNull();
+  });
+
+  it('rejects a section whose content contains a duplicated end tag', () => {
+    const raw = `${MEETINGS_SECTION_START}one${MEETINGS_SECTION_END} stray text ${MEETINGS_SECTION_END}`;
+    // The first end tag closes the section; the content between start and
+    // that first end tag is clean ('one'), so this one is NOT rejected --
+    // pinning that only a marker appearing INSIDE the extracted content
+    // (not trailing text after it) triggers the rejection.
+    expect(extractTemplateSection(raw, MEETINGS_SECTION_START, MEETINGS_SECTION_END)).toBe('one');
+  });
 });

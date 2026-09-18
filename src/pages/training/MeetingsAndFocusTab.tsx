@@ -912,10 +912,29 @@ function BlastSlot({
   // LRM-12: discards the open draft outright (blastsHook.deleteDraft is
   // draft-only, same seatbelt pattern as updateBlastBody -- see the hook).
   // Confirmed via discardConfirmOpen below before this ever runs.
+  //
+  // QA fix: synchronous re-entry guard, same pattern as
+  // onCreateEmptyDraftClick/runSummarize -- deleteDraft.isPending lags a
+  // render behind, so a fast double-click on the confirm button could
+  // otherwise fire two deletes.
+  const discardingRef = useRef(false);
   const onDiscardConfirm = () => {
     if (!draftBlast) return;
+    if (discardingRef.current) return;
+    discardingRef.current = true;
+    // QA fix: cancel any pending debounced autosave BEFORE the delete
+    // fires. Without this, typing and then discarding within the ~1.75s
+    // debounce window still lets the stale timer fire after the row is
+    // gone -- updateBlastBody's draft-only scope matches zero rows, and its
+    // "no longer editable" toast pops right after an otherwise-clean
+    // discard.
+    if (autosaveTimerRef.current) {
+      window.clearTimeout(autosaveTimerRef.current);
+      autosaveTimerRef.current = null;
+    }
     blastsHook.deleteDraft.mutate(draftBlast.id, {
       onSuccess: () => toast({ title: 'Draft discarded' }),
+      onSettled: () => { discardingRef.current = false; },
     });
     setDiscardConfirmOpen(false);
   };
@@ -1027,7 +1046,7 @@ function BlastSlot({
               </AlertDialogHeader>
               <AlertDialogFooter>
                 <AlertDialogCancel>Keep editing</AlertDialogCancel>
-                <AlertDialogAction onClick={onDiscardConfirm}>Discard</AlertDialogAction>
+                <AlertDialogAction disabled={blastsHook.deleteDraft.isPending} onClick={onDiscardConfirm}>Discard</AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>

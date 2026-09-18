@@ -70,12 +70,33 @@ export const FOCUS_SECTION_END = '[[/FOCUS]]';
 export const MEETINGS_SECTION_START = '[[MEETINGS]]';
 export const MEETINGS_SECTION_END = '[[/MEETINGS]]';
 
+// QA hardening: every marker literal the model can be asked to emit, used
+// below to reject a section whose extracted content itself contains a
+// marker -- see extractTemplateSection's own comment for why.
+const ALL_TEMPLATE_TAGS = [
+  FOCUS_SECTION_START, FOCUS_SECTION_END,
+  MEETINGS_SECTION_START, MEETINGS_SECTION_END,
+];
+
 /**
  * Pulls one delimited section out of a raw model response. Returns `null`
  * when the section is missing, malformed (end before start), or empty after
  * trimming -- callers treat `null` the same as "the model didn't produce
  * this part", which for the focus/meetings sections above means that part
  * of the template is simply omitted rather than emitted blank.
+ *
+ * QA hardening: also returns `null` when the extracted content itself
+ * contains any template marker substring. First-match indexOf extraction is
+ * exact for a well-formed response, but a pathological one that nests or
+ * duplicates a marker -- e.g.
+ * `[[FOCUS]]...[[MEETINGS]]...[[/MEETINGS]]...[[/FOCUS]]` -- would
+ * otherwise have its FOCUS extraction swallow the literal `[[MEETINGS]]`
+ * markers as ordinary text; those aren't in HTML_OUTPUT_RULES's tag
+ * allowlist, so sanitizeBlastHtml doesn't strip them and they'd survive as
+ * visible bracket text in a doctor's inbox. Rejecting the section here
+ * instead means a required section failing this way surfaces as index.ts's
+ * existing 502 "Draft generation failed" -- a clear error instead of
+ * malformed output silently reaching a doctor.
  */
 export function extractTemplateSection(raw: string, startTag: string, endTag: string): string | null {
   const startIdx = raw.indexOf(startTag);
@@ -84,5 +105,7 @@ export function extractTemplateSection(raw: string, startTag: string, endTag: st
   const endIdx = raw.indexOf(endTag, contentStart);
   if (endIdx === -1 || endIdx < contentStart) return null;
   const content = raw.slice(contentStart, endIdx).trim();
-  return content.length > 0 ? content : null;
+  if (content.length === 0) return null;
+  if (ALL_TEMPLATE_TAGS.some((tag) => content.includes(tag))) return null;
+  return content;
 }
