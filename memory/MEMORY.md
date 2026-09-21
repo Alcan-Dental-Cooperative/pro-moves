@@ -2,7 +2,7 @@
 
 ## Project Overview
 Multi-tenant SaaS coaching platform for dental practices.
-- Repo: ~/skill-flow-pro (also at GitHub: ruggerboy8/skill-flow-pro)
+- Repo: ~/dev/alcan/pro-moves (GitHub: Alcan-Dental-Cooperative/pro-moves)
 - Supabase project ref: yeypngaufuualdfzcjpk
 - Stack: Vite + React + TypeScript, Tailwind + shadcn/ui, Supabase (Postgres, Auth, RLS, Edge Functions)
 - No CLAUDE.md exists — docs are in /docs/ folder
