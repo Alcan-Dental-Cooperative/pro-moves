@@ -2613,6 +2613,7 @@ export type Database = {
           meeting_date: string
           organization_id: string
           raw_transcript: string | null
+          title: string | null
           updated_at: string
           week_start_date: string
         }
@@ -2624,6 +2625,7 @@ export type Database = {
           meeting_date: string
           organization_id: string
           raw_transcript?: string | null
+          title?: string | null
           updated_at?: string
           week_start_date: string
         }
@@ -2635,6 +2637,7 @@ export type Database = {
           meeting_date?: string
           organization_id?: string
           raw_transcript?: string | null
+          title?: string | null
           updated_at?: string
           week_start_date?: string
         }
@@ -3542,6 +3545,7 @@ export type Database = {
           paused_at: string | null
           primary_location_id: string | null
           pwa_enabled: boolean
+          pwa_installed_at: string | null
           role_id: number | null
           roles_updated_at: string | null
           scheduling_link: string | null
@@ -3580,6 +3584,7 @@ export type Database = {
           paused_at?: string | null
           primary_location_id?: string | null
           pwa_enabled?: boolean
+          pwa_installed_at?: string | null
           role_id?: number | null
           roles_updated_at?: string | null
           scheduling_link?: string | null
@@ -3618,6 +3623,7 @@ export type Database = {
           paused_at?: string | null
           primary_location_id?: string | null
           pwa_enabled?: boolean
+          pwa_installed_at?: string | null
           role_id?: number | null
           roles_updated_at?: string | null
           scheduling_link?: string | null
@@ -5391,6 +5397,7 @@ export type Database = {
         Returns: string
       }
       publish_survey: { Args: { p_survey_id: string }; Returns: undefined }
+      record_pwa_install: { Args: never; Returns: undefined }
       release_single_evaluation: {
         Args: { p_eval_id: string; p_released_by: string; p_visible: boolean }
         Returns: undefined
