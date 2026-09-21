@@ -42,10 +42,32 @@ needs no separate fix; it disappears once the client can update itself.
    click, show visible feedback (e.g. disable the button with "Just
    refreshed, retrying shortly...") instead of only `console.error`. A
    silent dead button is what made this feel broken.
-4. **Reconsider update mode (decision point for John, not required for this
+4. **Desktop never gets the PWA at all (John, 2026-09-21).** A desktop
+   user's experience must not change when their `pwa_enabled` flag flips
+   on. Gate ALL PWA activation, service worker registration included, on
+   platform detection, not viewport width: add `isMobilePlatform()` to
+   `src/lib/pwa.ts` using the existing `isIos()` plus an Android UA check.
+   Do NOT use `useIsMobile()` (a sub-768px viewport width check, fine for
+   banners, wrong for a sticky service worker: a narrowed desktop window
+   would register one permanently). On a non-mobile platform,
+   `PwaManager`/`isPwaActive` must not register the service worker or
+   render any install surface, and must actively UNREGISTER any service
+   worker already present from before this fix so affected desktops
+   self-heal on their next successful load. Exception: if the app is
+   running in standalone display mode (`isStandalone()`), someone
+   deliberately installed it there, so leave it active whatever the
+   platform.
+5. **Reconsider update mode (decision point for John, not required for this
    ticket):** either keep `prompt` mode with the above escape hatch, or move
    to `autoUpdate` so deploys roll out without user action. Document the
    choice in `docs/features/pwa-push-notifications.md`.
+
+Note: item 4 does not retroactively rescue a desktop already stuck on a
+stale build (its browser cannot fetch the new code until it escapes the old
+service worker), so the one-time manual unstick (close all tabs, or clear
+site data) is still needed for anyone currently affected. Items 1-3 exist
+so mobile users, who legitimately keep the service worker, can always
+escape too.
 
 ## Acceptance script (do X, expect Y)
 
@@ -66,6 +88,15 @@ production build.
 5. Regression: while offline, hit a lazy route. Expect the "You appear to be
    offline" variant, and "Try Again" must NOT unregister the service worker
    (offline users depend on the cache).
+6. Desktop gating: as a flagged user on a desktop browser (normal tab, not
+   installed), load the app and check DevTools > Application > Service
+   Workers. Expect NO service worker registered, and no install banner or
+   nudge even when the window is narrowed below phone width. If a service
+   worker was registered there before this fix, expect it to be gone after
+   one successful load.
+7. Mobile unchanged: on a phone (or DevTools mobile emulation with a
+   matching user agent), expect the service worker to register and install
+   surfaces to behave exactly as today.
 
 ## Personas to test as
 
@@ -79,7 +110,8 @@ production build.
 - Any change to the `lead-week-blast` edge function or blast composer. The
   stored draft bodies are verified-correct HTML; the "raw Markdown" report
   was a stale-client rendering artifact.
-- Changing who is `pwa_enabled`.
+- Changing who is `pwa_enabled` (the flag stays as the rollout lever; this
+  ticket changes what the flag does on desktop, not who has it).
 - Push notifications and install-nudge behavior.
 
 ## Docs the builder must read
