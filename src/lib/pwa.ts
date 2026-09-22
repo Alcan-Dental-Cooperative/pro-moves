@@ -257,9 +257,18 @@ export function hasPendingUpdate(): boolean {
   return updateAvailable;
 }
 
-export function applyPendingUpdate(): void {
+/**
+ * Hand off to the waiting service worker. Returns the promise from
+ * updateServiceWorker(true) so a caller can race it against a timeout --
+ * that promise resolves once the skip-waiting message is sent, not once the
+ * page has actually reloaded, so a caller that needs the reload to really
+ * happen (RouteErrorBoundary) still needs its own fallback for the case
+ * where the hand-off silently never completes (see escapeStaleServiceWorker).
+ */
+export function applyPendingUpdate(): Promise<void> {
   updateAvailable = false;
-  updateServiceWorker?.(true);
+  if (!updateServiceWorker) return Promise.resolve();
+  return updateServiceWorker(true);
 }
 
 /**
@@ -288,4 +297,37 @@ export async function clearWorkboxCaches(): Promise<void> {
   await Promise.all(
     keys.filter((key) => key.startsWith('workbox-')).map((key) => caches.delete(key))
   );
+}
+
+/** How long probeConnectivity() waits before treating the network as unreachable. */
+export const CONNECTIVITY_PROBE_TIMEOUT_MS = 3000;
+
+/**
+ * Confirms real network reachability -- navigator.onLine reports true on a
+ * captive portal or dead wifi, and RouteErrorBoundary's escape path trusts
+ * "online" before unregistering the service worker and clearing its
+ * precache. Getting that wrong for a genuinely offline user destroys their
+ * only cached copy of the app and reloads into nothing, so this does an
+ * actual round trip rather than trusting the browser's flag.
+ *
+ * Uses fetch, not a navigation, so navigateFallback (vite.config.ts) never
+ * applies; the unique cache-busting query param means it can't match any
+ * precached asset's exact URL either, and runtimeCaching is empty in this
+ * project's workbox config, so nothing here can be answered locally --
+ * a resolved `ok` response only ever comes from the real network.
+ */
+export async function probeConnectivity(timeoutMs = CONNECTIVITY_PROBE_TIMEOUT_MS): Promise<boolean> {
+  try {
+    const probeUrl = `${window.location.origin}/?swProbe=${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const response = await fetch(probeUrl, { cache: 'no-store', signal: controller.signal });
+      return response.ok;
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  } catch {
+    return false;
+  }
 }

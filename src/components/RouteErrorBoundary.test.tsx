@@ -1,8 +1,18 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { createRef } from 'react';
 import { render, cleanup, screen, fireEvent, waitFor, act } from '@testing-library/react';
-import { RouteErrorBoundary, classifyRouteError } from './RouteErrorBoundary';
-import { hasPendingUpdate, applyPendingUpdate, unregisterAllServiceWorkers, clearWorkboxCaches } from '@/lib/pwa';
+import {
+  RouteErrorBoundary,
+  classifyRouteError,
+  __resetInMemoryReloadTimestampForTests,
+} from './RouteErrorBoundary';
+import {
+  hasPendingUpdate,
+  applyPendingUpdate,
+  unregisterAllServiceWorkers,
+  clearWorkboxCaches,
+  probeConnectivity,
+} from '@/lib/pwa';
 
 // PRF-3a: the "New Version Available" copy this boundary shows for a failed
 // lazy-chunk load is misleading when the real cause is the user being
@@ -18,12 +28,16 @@ import { hasPendingUpdate, applyPendingUpdate, unregisterAllServiceWorkers, clea
 // feedback when the loop guard swallows a click (item 3). src/lib/pwa.ts is
 // mocked so these tests control exactly what "an update is already waiting"
 // vs "nothing is waiting, unregister" looks like, without touching the real
-// service worker/cache APIs jsdom doesn't implement anyway.
+// service worker/cache APIs jsdom doesn't implement anyway. probeConnectivity
+// defaults to resolving true (network really is there) so the existing
+// escape-path tests don't have to think about the connectivity gate;
+// the adversarial-QA tests below override it explicitly.
 vi.mock('@/lib/pwa', () => ({
   hasPendingUpdate: vi.fn(() => false),
-  applyPendingUpdate: vi.fn(),
+  applyPendingUpdate: vi.fn(() => Promise.resolve()),
   unregisterAllServiceWorkers: vi.fn(() => Promise.resolve()),
   clearWorkboxCaches: vi.fn(() => Promise.resolve()),
+  probeConnectivity: vi.fn(() => Promise.resolve(true)),
 }));
 
 afterEach(cleanup);
@@ -66,10 +80,12 @@ describe('RouteErrorBoundary', () => {
   // only on a button click.
   beforeEach(() => {
     sessionStorage.clear();
+    __resetInMemoryReloadTimestampForTests();
     vi.mocked(hasPendingUpdate).mockReset().mockReturnValue(false);
-    vi.mocked(applyPendingUpdate).mockClear();
+    vi.mocked(applyPendingUpdate).mockReset().mockResolvedValue(undefined);
     vi.mocked(unregisterAllServiceWorkers).mockClear().mockResolvedValue(undefined);
     vi.mocked(clearWorkboxCaches).mockClear().mockResolvedValue(undefined);
+    vi.mocked(probeConnectivity).mockReset().mockResolvedValue(true);
   });
 
   // Every test in this block throws a real error through the boundary,
@@ -159,7 +175,9 @@ describe('RouteErrorBoundary', () => {
 
       fireEvent.click(screen.getByRole('button', { name: /refresh page/i }));
 
-      expect(unregisterAllServiceWorkers).toHaveBeenCalledTimes(1);
+      // The connectivity probe (finding 3) is awaited before unregistering,
+      // so this call lands after a microtask, not synchronously with the click.
+      await waitFor(() => expect(unregisterAllServiceWorkers).toHaveBeenCalledTimes(1));
       expect(applyPendingUpdate).not.toHaveBeenCalled();
       await waitFor(() => expect(clearWorkboxCaches).toHaveBeenCalledTimes(1));
       await waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
@@ -182,14 +200,15 @@ describe('RouteErrorBoundary', () => {
   // screen at all. Guarded by the same sessionStorage timestamp as the
   // manual button, so it can only ever fire once per loop-guard window.
   describe('auto-recover on chunk-update (item 2)', () => {
-    it('escapes automatically on mount, with no click needed', () => {
+    it('escapes automatically on mount, with no click needed', async () => {
       setOnline(true);
       vi.mocked(hasPendingUpdate).mockReturnValue(false);
       renderWithThrow('Failed to fetch dynamically imported module');
 
-      // componentDidCatch calls the escape path synchronously; only its
-      // promise continuation (clearWorkboxCaches/reload) is deferred.
-      expect(unregisterAllServiceWorkers).toHaveBeenCalledTimes(1);
+      // componentDidCatch calls the escape path synchronously, but the
+      // connectivity probe (finding 3) it now goes through first means the
+      // actual unregister call lands a microtask later.
+      await waitFor(() => expect(unregisterAllServiceWorkers).toHaveBeenCalledTimes(1));
     });
 
     it('does not auto-recover a second time inside the loop-guard window', () => {
@@ -214,13 +233,17 @@ describe('RouteErrorBoundary', () => {
   // not just a console.error. Uses a generic error for the same reason as
   // the item-1 block -- no auto-recover competing for the guard window.
   describe('loop-guard button feedback (item 3)', () => {
-    it('disables the button with explanatory text when a second click lands inside the guard window', () => {
+    it('disables the button with explanatory text when a second click lands inside the guard window', async () => {
       setOnline(true);
       renderWithThrow('Cannot read properties of undefined', 'TypeError');
 
       const button = screen.getByRole('button', { name: /refresh page/i });
       fireEvent.click(button); // first click: real attempt, sets the guard timestamp
-      expect(unregisterAllServiceWorkers).toHaveBeenCalledTimes(1);
+      // The guard timestamp is written synchronously (before the connectivity
+      // probe), so the second click below is swallowed regardless of timing;
+      // waiting for the first attempt's unregister call just makes the "still
+      // just the one" assertion below meaningful.
+      await waitFor(() => expect(unregisterAllServiceWorkers).toHaveBeenCalledTimes(1));
 
       fireEvent.click(screen.getByRole('button')); // second click: swallowed
       expect(unregisterAllServiceWorkers).toHaveBeenCalledTimes(1); // still just the one
@@ -251,6 +274,156 @@ describe('RouteErrorBoundary', () => {
       } finally {
         vi.useRealTimers();
       }
+    });
+  });
+
+  // Finding 1 (adversarial QA): applyPendingUpdate()'s promise resolves once
+  // the skip-waiting message is sent, not once the page has actually
+  // reloaded. A waiting worker that never takes control (e.g. other tabs
+  // still holding the old one) must not wedge the user with no reload and
+  // no feedback -- exactly the bug this ticket exists to fix.
+  describe('pending-update hand-off timeout fallback (finding 1)', () => {
+    it('falls back to unregister and reload when the hand-off never resolves', async () => {
+      vi.useFakeTimers();
+      try {
+        setOnline(true);
+        vi.mocked(hasPendingUpdate).mockReturnValue(true);
+        vi.mocked(applyPendingUpdate).mockReturnValue(new Promise<void>(() => {})); // never settles
+        const { reload } = renderWithThrow('Cannot read properties of undefined', 'TypeError');
+
+        fireEvent.click(screen.getByRole('button', { name: /refresh page/i }));
+
+        expect(applyPendingUpdate).toHaveBeenCalledTimes(1);
+        expect(unregisterAllServiceWorkers).not.toHaveBeenCalled();
+
+        // Same window as PENDING_UPDATE_TIMEOUT_MS in the component.
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(3000);
+        });
+
+        expect(unregisterAllServiceWorkers).toHaveBeenCalledTimes(1);
+        expect(reload).toHaveBeenCalledTimes(1);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('does not fall back when the hand-off resolves before the timeout', async () => {
+      vi.useFakeTimers();
+      try {
+        setOnline(true);
+        vi.mocked(hasPendingUpdate).mockReturnValue(true);
+        vi.mocked(applyPendingUpdate).mockResolvedValue(undefined); // resolves right away
+        const { reload } = renderWithThrow('Cannot read properties of undefined', 'TypeError');
+
+        fireEvent.click(screen.getByRole('button', { name: /refresh page/i }));
+
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(3000);
+        });
+
+        expect(unregisterAllServiceWorkers).not.toHaveBeenCalled();
+        expect(reload).not.toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
+  // Finding 2 (adversarial QA): this boundary is the outermost one in the
+  // tree, so a thrown storage access inside componentDidCatch (locked-down
+  // browsers, block-all-cookies settings) must never itself become the
+  // crash -- that would replace a recoverable fallback screen with a blank
+  // one -- and the loop guard must keep working via the in-memory fallback.
+  describe('safe sessionStorage access (finding 2)', () => {
+    function blockSessionStorage() {
+      const getItemSpy = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+        throw new Error('sessionStorage blocked');
+      });
+      const setItemSpy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+        throw new Error('sessionStorage blocked');
+      });
+      return () => {
+        getItemSpy.mockRestore();
+        setItemSpy.mockRestore();
+      };
+    }
+
+    it('does not crash and still shows the fallback UI when sessionStorage throws', () => {
+      const restore = blockSessionStorage();
+      try {
+        setOnline(true);
+        expect(() => renderWithThrow('Cannot read properties of undefined', 'TypeError')).not.toThrow();
+        expect(screen.queryByText('Something went wrong')).not.toBeNull();
+      } finally {
+        restore();
+      }
+    });
+
+    it('does not throw when the chunk-update auto-recover fires with sessionStorage unavailable, and still escapes once', async () => {
+      const restore = blockSessionStorage();
+      try {
+        setOnline(true);
+        vi.mocked(hasPendingUpdate).mockReturnValue(false);
+        expect(() => renderWithThrow('Failed to fetch dynamically imported module')).not.toThrow();
+        // The escape ran exactly once -- proves componentDidCatch neither
+        // crashed nor got stuck unable to tell "have I already tried this".
+        await waitFor(() => expect(unregisterAllServiceWorkers).toHaveBeenCalledTimes(1));
+      } finally {
+        restore();
+      }
+    });
+
+    it('keeps the loop guard working via the in-memory fallback when sessionStorage is unavailable', async () => {
+      const restore = blockSessionStorage();
+      try {
+        setOnline(true);
+        renderWithThrow('Cannot read properties of undefined', 'TypeError');
+
+        fireEvent.click(screen.getByRole('button', { name: /refresh page/i }));
+        await waitFor(() => expect(unregisterAllServiceWorkers).toHaveBeenCalledTimes(1));
+
+        fireEvent.click(screen.getByRole('button')); // second click: still swallowed
+        expect(unregisterAllServiceWorkers).toHaveBeenCalledTimes(1);
+
+        expect(
+          (screen.getByRole('button', { name: /just refreshed, retrying shortly/i }) as HTMLButtonElement).disabled
+        ).toBe(true);
+      } finally {
+        restore();
+      }
+    });
+  });
+
+  // Finding 3 (adversarial QA): navigator.onLine reports true on a captive
+  // portal or dead wifi. Before this ticket that misclassification was
+  // harmless (both paths just reloaded); now it would unregister a
+  // genuinely offline user's service worker and clear its precache --
+  // destroying their only copy of the app -- then reload into nothing. The
+  // connectivity probe gates the unregister step against that.
+  describe('connectivity probe before unregister (finding 3)', () => {
+    it('reloads without unregistering when the probe cannot reach the network', async () => {
+      setOnline(true); // navigator.onLine lied
+      vi.mocked(hasPendingUpdate).mockReturnValue(false);
+      vi.mocked(probeConnectivity).mockResolvedValue(false);
+      const { reload } = renderWithThrow('Cannot read properties of undefined', 'TypeError');
+
+      fireEvent.click(screen.getByRole('button', { name: /refresh page/i }));
+
+      await waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
+      expect(unregisterAllServiceWorkers).not.toHaveBeenCalled();
+    });
+
+    it('proceeds to unregister and reload once the probe confirms real connectivity', async () => {
+      setOnline(true);
+      vi.mocked(hasPendingUpdate).mockReturnValue(false);
+      vi.mocked(probeConnectivity).mockResolvedValue(true);
+      const { reload } = renderWithThrow('Cannot read properties of undefined', 'TypeError');
+
+      fireEvent.click(screen.getByRole('button', { name: /refresh page/i }));
+
+      await waitFor(() => expect(unregisterAllServiceWorkers).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
     });
   });
 

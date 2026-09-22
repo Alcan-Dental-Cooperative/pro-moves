@@ -50,7 +50,13 @@ export function PwaManager() {
   // successful load without waiting for the user to log back in.
   useEffect(() => {
     if (!platformEligible) {
-      unregisterAllServiceWorkers();
+      // Restricted contexts (private browsing, locked-down policies) can
+      // reject serviceWorker.getRegistrations()/unregister() -- swallow
+      // rather than let it surface as an unhandled rejection on every
+      // desktop load.
+      unregisterAllServiceWorkers().catch((err) => {
+        console.debug('[pwa] self-heal unregister failed', err);
+      });
     }
   }, [platformEligible]);
 

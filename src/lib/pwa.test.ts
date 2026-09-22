@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   getInstallPathway,
   isBannerDismissed,
@@ -8,6 +8,7 @@ import {
   shouldShowInstalledNudge,
   isMobilePlatform,
   isPlatformPwaEligible,
+  probeConnectivity,
   INSTALLED_NUDGE_SNOOZE_DAYS,
 } from './pwa';
 
@@ -230,5 +231,59 @@ describe('isPlatformPwaEligible', () => {
     setUserAgent(IPHONE_UA);
     setStandalone(true);
     expect(isPlatformPwaEligible()).toBe(true);
+  });
+});
+
+// stale-client-refresh-escape, adversarial QA finding 3: navigator.onLine
+// reports true on a captive portal or dead wifi, so RouteErrorBoundary's
+// escape path confirms real reachability before unregistering the service
+// worker. These pin probeConnectivity()'s own contract independent of the
+// boundary that consumes it.
+describe('probeConnectivity', () => {
+  const originalFetch = global.fetch;
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
+
+  it('resolves true when the round trip succeeds with an ok response', async () => {
+    global.fetch = vi.fn().mockResolvedValue({ ok: true } as Response);
+    await expect(probeConnectivity()).resolves.toBe(true);
+  });
+
+  it('resolves false when the response is not ok', async () => {
+    global.fetch = vi.fn().mockResolvedValue({ ok: false } as Response);
+    await expect(probeConnectivity()).resolves.toBe(false);
+  });
+
+  it('resolves false when fetch itself rejects (offline, DNS failure, etc.)', async () => {
+    global.fetch = vi.fn().mockRejectedValue(new Error('network error'));
+    await expect(probeConnectivity()).resolves.toBe(false);
+  });
+
+  it('resolves false on timeout instead of hanging forever', async () => {
+    // A real fetch() rejects with AbortError once its AbortSignal fires;
+    // this stand-in mimics exactly that so the timeout path is exercised
+    // the same way it would be against a real hung request.
+    global.fetch = vi.fn(
+      (_url: string, init?: RequestInit) =>
+        new Promise<Response>((_, reject) => {
+          init?.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')));
+        })
+    );
+    await expect(probeConnectivity(10)).resolves.toBe(false);
+  });
+
+  it('requests a same-origin, cache-busting, no-store URL so no caching layer can answer it locally', async () => {
+    const fetchSpy = vi.fn().mockResolvedValue({ ok: true } as Response);
+    global.fetch = fetchSpy;
+
+    await probeConnectivity();
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    expect(url.startsWith(window.location.origin)).toBe(true);
+    expect(url).toMatch(/[?&]swProbe=/);
+    expect(init).toMatchObject({ cache: 'no-store' });
   });
 });

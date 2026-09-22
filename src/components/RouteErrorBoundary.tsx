@@ -6,6 +6,7 @@ import {
   applyPendingUpdate,
   unregisterAllServiceWorkers,
   clearWorkboxCaches,
+  probeConnectivity,
 } from '@/lib/pwa';
 
 interface Props {
@@ -15,6 +16,47 @@ interface Props {
 /** How long the reload loop guard blocks a repeat refresh, in milliseconds. */
 const LOOP_GUARD_WINDOW_MS = 10000;
 const RELOAD_TIMESTAMP_KEY = 'app_reload_timestamp';
+/** How long the pending-update hand-off gets before falling back to the
+ * harder unregister escape (adversarial QA finding: a waiting worker that
+ * never takes control -- e.g. other tabs still holding the old one -- must
+ * not wedge the user with no reload and no feedback). */
+const PENDING_UPDATE_TIMEOUT_MS = 3000;
+
+// This boundary is the outermost one in the tree, so a thrown storage
+// access inside componentDidCatch (locked-down browsers, block-all-cookies
+// settings) must never itself become the crash -- that would replace a
+// recoverable fallback screen with a blank one. Falls back to an in-memory
+// timestamp so the reload loop guard still works without sessionStorage;
+// it just stops surviving an actual page reload, which is an acceptable
+// trade next to "guard silently can't do its job."
+let inMemoryReloadTimestamp: string | null = null;
+
+function readReloadTimestamp(): string | null {
+  try {
+    return sessionStorage.getItem(RELOAD_TIMESTAMP_KEY);
+  } catch {
+    return inMemoryReloadTimestamp;
+  }
+}
+
+function writeReloadTimestamp(value: string): void {
+  inMemoryReloadTimestamp = value;
+  try {
+    sessionStorage.setItem(RELOAD_TIMESTAMP_KEY, value);
+  } catch {
+    /* sessionStorage unavailable -- the in-memory fallback above still guards */
+  }
+}
+
+/**
+ * Test-only: this fallback is deliberately module-level (survives across
+ * component instances, same as a real reload would find it in sessionStorage),
+ * so tests that simulate sessionStorage being unavailable need a way to reset
+ * it between cases instead of bleeding state across them.
+ */
+export function __resetInMemoryReloadTimestampForTests(): void {
+  inMemoryReloadTimestamp = null;
+}
 
 /**
  * What kind of error the boundary is showing, decided once at catch time:
@@ -58,6 +100,7 @@ export function classifyRouteError(error: Pick<Error, 'message' | 'name'>, isOnl
 
 export class RouteErrorBoundary extends Component<Props, State> {
   private loopGuardTimeout: ReturnType<typeof setTimeout> | null = null;
+  private pendingUpdateTimeout: ReturnType<typeof setTimeout> | null = null;
 
   constructor(props: Props) {
     super(props);
@@ -86,6 +129,7 @@ export class RouteErrorBoundary extends Component<Props, State> {
 
   componentWillUnmount() {
     if (this.loopGuardTimeout) clearTimeout(this.loopGuardTimeout);
+    if (this.pendingUpdateTimeout) clearTimeout(this.pendingUpdateTimeout);
   }
 
   /**
@@ -98,7 +142,7 @@ export class RouteErrorBoundary extends Component<Props, State> {
    * and leaves the error screen showing.
    */
   private attemptRefresh = (auto = false) => {
-    const lastReload = sessionStorage.getItem(RELOAD_TIMESTAMP_KEY);
+    const lastReload = readReloadTimestamp();
     const now = Date.now();
     const elapsed = lastReload ? now - parseInt(lastReload, 10) : Infinity;
 
@@ -114,7 +158,7 @@ export class RouteErrorBoundary extends Component<Props, State> {
       return;
     }
 
-    sessionStorage.setItem(RELOAD_TIMESTAMP_KEY, now.toString());
+    writeReloadTimestamp(now.toString());
     this.escapeStaleServiceWorker();
   };
 
@@ -126,9 +170,11 @@ export class RouteErrorBoundary extends Component<Props, State> {
    * The actual escape (item 1): a bare reload is never enough here, because
    * the old service worker answers it with the same cached old index.html
    * (workbox navigateFallback). If a new build already downloaded and is
-   * waiting, activate it -- that hands off and reloads on its own. Otherwise
+   * waiting, activate it -- that hands off and reloads on its own, with a
+   * timeout fallback in case the hand-off never actually completes. Otherwise
    * unregister the worker (and its precache) so the next reload has to hit
-   * the network for real.
+   * the network for real -- but only once a real connectivity probe confirms
+   * the network is actually there.
    *
    * Regression guard: the offline variant ("You appear to be offline") must
    * never unregister -- those users are relying on the very cache this
@@ -141,14 +187,65 @@ export class RouteErrorBoundary extends Component<Props, State> {
     }
 
     if (hasPendingUpdate()) {
-      applyPendingUpdate();
+      this.applyPendingUpdateWithFallback();
       return;
     }
 
-    unregisterAllServiceWorkers()
-      .then(() => clearWorkboxCaches())
-      .catch((err) => console.error('[pwa] failed to clear stale service worker', err))
-      .finally(() => this.reload());
+    this.unregisterAfterConfirmingOnline();
+  };
+
+  /**
+   * Adversarial QA finding: applyPendingUpdate()'s promise resolves once the
+   * skip-waiting message is sent, not once the page has actually reloaded --
+   * a real workbox gotcha (e.g. a waiting worker that never takes control
+   * with multiple tabs open) can leave the hand-off silently incomplete,
+   * wedging the user with no reload and no feedback, which is the exact bug
+   * this ticket exists to fix. Races the hand-off against a timeout and
+   * falls back to the harder unregister escape if it doesn't win.
+   */
+  private applyPendingUpdateWithFallback = () => {
+    const timeout = new Promise<never>((_, reject) => {
+      this.pendingUpdateTimeout = setTimeout(() => {
+        reject(new Error('applyPendingUpdate timed out'));
+      }, PENDING_UPDATE_TIMEOUT_MS);
+    });
+
+    const clearPendingUpdateTimeout = () => {
+      if (this.pendingUpdateTimeout) {
+        clearTimeout(this.pendingUpdateTimeout);
+        this.pendingUpdateTimeout = null;
+      }
+    };
+
+    Promise.race([applyPendingUpdate(), timeout])
+      .then(() => clearPendingUpdateTimeout())
+      .catch(() => {
+        clearPendingUpdateTimeout();
+        this.unregisterAfterConfirmingOnline();
+      });
+  };
+
+  /**
+   * Adversarial QA finding: navigator.onLine reports true on a captive
+   * portal or dead wifi, and this boundary's classification trusts it. Before
+   * this fix that misclassification was harmless (both paths just reloaded);
+   * now it would unregister a genuinely offline user's service worker and
+   * clear its precache -- destroying their only copy of the app -- then
+   * reload into nothing. A real network probe gates the unregister step for
+   * both the auto and manual paths, since both reach it through here.
+   */
+  private unregisterAfterConfirmingOnline = () => {
+    probeConnectivity().then((online) => {
+      if (!online) {
+        this.reload();
+        return;
+      }
+
+      unregisterAllServiceWorkers()
+        .then(() => clearWorkboxCaches())
+        .catch((err) => console.error('[pwa] failed to clear stale service worker', err))
+        .finally(() => this.reload());
+    });
   };
 
   // Extracted so tests can substitute it on a ref'd instance -- jsdom's
