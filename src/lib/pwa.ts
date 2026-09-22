@@ -14,6 +14,12 @@ export const INSTALLED_NUDGE_SNOOZE_DAYS = 7;
 
 let registered = false;
 let updateServiceWorker: ((reloadPage?: boolean) => Promise<void>) | null = null;
+// Set when the SW reports a new build waiting (onNeedRefresh); cleared once
+// applyPendingUpdate() hands it off. Lets callers (RouteErrorBoundary) tell
+// "an update is already downloaded, just activate it" apart from "nothing is
+// waiting, the stale worker itself has to go" -- calling updateServiceWorker()
+// with nothing waiting is a no-op that never reloads the page.
+let updateAvailable = false;
 
 // Captured at module load so we don't miss the (early-firing) Android install
 // prompt event before the banner mounts.
@@ -53,7 +59,15 @@ export function setDeviceOptOut(): void {
   }
 }
 
-/** The single gate: profile flag or local dev flag, minus device opt-out. */
+/**
+ * The rollout gate: profile flag or local dev flag, minus device opt-out.
+ * This is deliberately NOT platform-aware -- it's also read by
+ * useMobileShell (mobile-build-instructions.md ground rule 1), which
+ * combines it with viewport width on purpose. PwaManager, where actual
+ * service worker registration and install-surface rendering happen,
+ * additionally requires isMobilePlatform() || isStandalone() on top of
+ * this before treating the PWA as active (stale-client-refresh-escape).
+ */
 export function isPwaActive(profileEnabled: boolean): boolean {
   return !isDeviceOptedOut() && (profileEnabled || isLocallyFlagged());
 }
@@ -72,6 +86,29 @@ export function isIos(): boolean {
     /iphone|ipad|ipod/i.test(navigator.userAgent) ||
     (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
   );
+}
+
+/**
+ * Platform gate for PWA activation (stale-client-refresh-escape, item 4):
+ * a phone or tablet, not a browser window that merely happens to be narrow.
+ * Deliberately NOT viewport-based -- a resized desktop window must not
+ * register a sticky service worker. See PwaManager for where this combines
+ * with isStandalone() to decide whether to register/unregister.
+ */
+export function isMobilePlatform(): boolean {
+  return isIos() || /android/i.test(navigator.userAgent);
+}
+
+/**
+ * Whether PWA activation (service worker registration, install surfaces)
+ * is allowed here: a mobile platform, or standalone display mode regardless
+ * of platform -- someone deliberately installed it, so it keeps working
+ * even from, say, an iPad reporting as desktop Safari. Extracted as its own
+ * pure combinator so PwaManager's gating decision is unit-testable without
+ * mounting the component.
+ */
+export function isPlatformPwaEligible(): boolean {
+  return isMobilePlatform() || isStandalone();
 }
 
 /**
@@ -208,10 +245,89 @@ export async function registerPwaServiceWorker(onNeedRefresh: () => void): Promi
   const { registerSW } = await import('virtual:pwa-register');
   updateServiceWorker = registerSW({
     immediate: true,
-    onNeedRefresh,
+    onNeedRefresh: () => {
+      updateAvailable = true;
+      onNeedRefresh();
+    },
   });
 }
 
-export function applyPendingUpdate(): void {
-  updateServiceWorker?.(true);
+/** Whether a new build has already downloaded and is waiting to activate. */
+export function hasPendingUpdate(): boolean {
+  return updateAvailable;
+}
+
+/**
+ * Hand off to the waiting service worker. Returns the promise from
+ * updateServiceWorker(true) so a caller can race it against a timeout --
+ * that promise resolves once the skip-waiting message is sent, not once the
+ * page has actually reloaded, so a caller that needs the reload to really
+ * happen (RouteErrorBoundary) still needs its own fallback for the case
+ * where the hand-off silently never completes (see escapeStaleServiceWorker).
+ */
+export function applyPendingUpdate(): Promise<void> {
+  updateAvailable = false;
+  if (!updateServiceWorker) return Promise.resolve();
+  return updateServiceWorker(true);
+}
+
+/**
+ * Unregister every service worker registration for this origin. Used both
+ * to escape a stale worker that's serving old cached routes
+ * (RouteErrorBoundary) and to self-heal a desktop that registered one
+ * before platform gating existed (PwaManager). Safe to call when nothing is
+ * registered.
+ */
+export async function unregisterAllServiceWorkers(): Promise<void> {
+  if (!('serviceWorker' in navigator)) return;
+  const registrations = await navigator.serviceWorker.getRegistrations();
+  await Promise.all(registrations.map((registration) => registration.unregister()));
+}
+
+/**
+ * Delete workbox's own caches (the app-shell precache) so a reload after
+ * unregisterAllServiceWorkers() can't still serve old cached assets while
+ * the browser cache is warm. Best-effort: any cache API failure is
+ * swallowed by the caller, since the unregister + reload is what actually
+ * matters.
+ */
+export async function clearWorkboxCaches(): Promise<void> {
+  if (!('caches' in window)) return;
+  const keys = await caches.keys();
+  await Promise.all(
+    keys.filter((key) => key.startsWith('workbox-')).map((key) => caches.delete(key))
+  );
+}
+
+/** How long probeConnectivity() waits before treating the network as unreachable. */
+export const CONNECTIVITY_PROBE_TIMEOUT_MS = 3000;
+
+/**
+ * Confirms real network reachability -- navigator.onLine reports true on a
+ * captive portal or dead wifi, and RouteErrorBoundary's escape path trusts
+ * "online" before unregistering the service worker and clearing its
+ * precache. Getting that wrong for a genuinely offline user destroys their
+ * only cached copy of the app and reloads into nothing, so this does an
+ * actual round trip rather than trusting the browser's flag.
+ *
+ * Uses fetch, not a navigation, so navigateFallback (vite.config.ts) never
+ * applies; the unique cache-busting query param means it can't match any
+ * precached asset's exact URL either, and runtimeCaching is empty in this
+ * project's workbox config, so nothing here can be answered locally --
+ * a resolved `ok` response only ever comes from the real network.
+ */
+export async function probeConnectivity(timeoutMs = CONNECTIVITY_PROBE_TIMEOUT_MS): Promise<boolean> {
+  try {
+    const probeUrl = `${window.location.origin}/?swProbe=${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const response = await fetch(probeUrl, { cache: 'no-store', signal: controller.signal });
+      return response.ok;
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  } catch {
+    return false;
+  }
 }

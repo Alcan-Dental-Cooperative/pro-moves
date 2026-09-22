@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   getInstallPathway,
   isBannerDismissed,
@@ -6,8 +6,43 @@ import {
   isInstalledNudgeSnoozed,
   snoozeInstalledNudge,
   shouldShowInstalledNudge,
+  isMobilePlatform,
+  isPlatformPwaEligible,
+  probeConnectivity,
   INSTALLED_NUDGE_SNOOZE_DAYS,
 } from './pwa';
+
+// Helpers for stubbing navigator/window bits that isMobilePlatform() and
+// isPlatformPwaEligible() read directly, rather than taking as arguments
+// (matching the existing isIos()/isStandalone() style in this file).
+function setUserAgent(ua: string) {
+  Object.defineProperty(window.navigator, 'userAgent', { value: ua, configurable: true });
+}
+
+function setPlatform(platform: string, maxTouchPoints = 0) {
+  Object.defineProperty(window.navigator, 'platform', { value: platform, configurable: true });
+  Object.defineProperty(window.navigator, 'maxTouchPoints', { value: maxTouchPoints, configurable: true });
+}
+
+function setStandalone(matches: boolean) {
+  window.matchMedia = ((query: string) => ({
+    matches: query === '(display-mode: standalone)' ? matches : false,
+    media: query,
+    onchange: null,
+    addListener: () => {},
+    removeListener: () => {},
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    dispatchEvent: () => false,
+  })) as unknown as typeof window.matchMedia;
+}
+
+const IPHONE_UA =
+  'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1';
+const ANDROID_UA =
+  'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36';
+const DESKTOP_UA =
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
 describe('getInstallPathway', () => {
   it('routes iOS Safari to the share-sheet steps', () => {
@@ -111,5 +146,144 @@ describe('installed-nudge snooze (recurring, unlike the banner)', () => {
   it('treats a corrupted stored value as not snoozed', () => {
     localStorage.setItem('pwa_installed_nudge_snooze_until', 'garbage');
     expect(isInstalledNudgeSnoozed()).toBe(false);
+  });
+});
+
+// stale-client-refresh-escape, item 4: PWA activation must be gated on the
+// physical platform, not the viewport (useIsMobile is <768px and would
+// treat a narrowed desktop window as mobile -- exactly the bug). These
+// pin isMobilePlatform() against real UA strings for each device class.
+describe('isMobilePlatform', () => {
+  const originalUserAgent = window.navigator.userAgent;
+  const originalPlatform = window.navigator.platform;
+  const originalMaxTouchPoints = window.navigator.maxTouchPoints;
+
+  afterEach(() => {
+    setUserAgent(originalUserAgent);
+    setPlatform(originalPlatform, originalMaxTouchPoints);
+  });
+
+  it('is true on an iPhone UA', () => {
+    setUserAgent(IPHONE_UA);
+    setPlatform('iPhone');
+    expect(isMobilePlatform()).toBe(true);
+  });
+
+  it('is true on a modern iPad reporting as MacIntel with touch support', () => {
+    // isIos() has this same special case (iPadOS Safari UA-sniffs as Mac).
+    setUserAgent(DESKTOP_UA);
+    setPlatform('MacIntel', 5);
+    expect(isMobilePlatform()).toBe(true);
+  });
+
+  it('is true on an Android UA', () => {
+    setUserAgent(ANDROID_UA);
+    setPlatform('Linux armv8l');
+    expect(isMobilePlatform()).toBe(true);
+  });
+
+  it('is false on a desktop UA', () => {
+    setUserAgent(DESKTOP_UA);
+    setPlatform('MacIntel', 0);
+    expect(isMobilePlatform()).toBe(false);
+  });
+
+  it('is false on a desktop UA even at zero touch points on MacIntel', () => {
+    setUserAgent(DESKTOP_UA);
+    setPlatform('MacIntel', 0);
+    expect(isMobilePlatform()).toBe(false);
+  });
+});
+
+describe('isPlatformPwaEligible', () => {
+  const originalUserAgent = window.navigator.userAgent;
+  const originalPlatform = window.navigator.platform;
+  const originalMaxTouchPoints = window.navigator.maxTouchPoints;
+  const originalMatchMedia = window.matchMedia;
+
+  afterEach(() => {
+    setUserAgent(originalUserAgent);
+    setPlatform(originalPlatform, originalMaxTouchPoints);
+    window.matchMedia = originalMatchMedia;
+  });
+
+  it('is eligible on a mobile platform, not standalone', () => {
+    setUserAgent(ANDROID_UA);
+    setStandalone(false);
+    expect(isPlatformPwaEligible()).toBe(true);
+  });
+
+  it('is not eligible on a desktop platform, not standalone', () => {
+    setUserAgent(DESKTOP_UA);
+    setPlatform('MacIntel', 0);
+    setStandalone(false);
+    expect(isPlatformPwaEligible()).toBe(false);
+  });
+
+  it('the standalone exception: a desktop platform running standalone stays eligible', () => {
+    setUserAgent(DESKTOP_UA);
+    setPlatform('MacIntel', 0);
+    setStandalone(true);
+    expect(isPlatformPwaEligible()).toBe(true);
+  });
+
+  it('a mobile platform running standalone is eligible (both reasons agree)', () => {
+    setUserAgent(IPHONE_UA);
+    setStandalone(true);
+    expect(isPlatformPwaEligible()).toBe(true);
+  });
+});
+
+// stale-client-refresh-escape, adversarial QA finding 3: navigator.onLine
+// reports true on a captive portal or dead wifi, so RouteErrorBoundary's
+// escape path confirms real reachability before unregistering the service
+// worker. These pin probeConnectivity()'s own contract independent of the
+// boundary that consumes it.
+describe('probeConnectivity', () => {
+  const originalFetch = global.fetch;
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
+
+  it('resolves true when the round trip succeeds with an ok response', async () => {
+    global.fetch = vi.fn().mockResolvedValue({ ok: true } as Response);
+    await expect(probeConnectivity()).resolves.toBe(true);
+  });
+
+  it('resolves false when the response is not ok', async () => {
+    global.fetch = vi.fn().mockResolvedValue({ ok: false } as Response);
+    await expect(probeConnectivity()).resolves.toBe(false);
+  });
+
+  it('resolves false when fetch itself rejects (offline, DNS failure, etc.)', async () => {
+    global.fetch = vi.fn().mockRejectedValue(new Error('network error'));
+    await expect(probeConnectivity()).resolves.toBe(false);
+  });
+
+  it('resolves false on timeout instead of hanging forever', async () => {
+    // A real fetch() rejects with AbortError once its AbortSignal fires;
+    // this stand-in mimics exactly that so the timeout path is exercised
+    // the same way it would be against a real hung request.
+    global.fetch = vi.fn(
+      (_url: string, init?: RequestInit) =>
+        new Promise<Response>((_, reject) => {
+          init?.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')));
+        })
+    );
+    await expect(probeConnectivity(10)).resolves.toBe(false);
+  });
+
+  it('requests a same-origin, cache-busting, no-store URL so no caching layer can answer it locally', async () => {
+    const fetchSpy = vi.fn().mockResolvedValue({ ok: true } as Response);
+    global.fetch = fetchSpy;
+
+    await probeConnectivity();
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    expect(url.startsWith(window.location.origin)).toBe(true);
+    expect(url).toMatch(/[?&]swProbe=/);
+    expect(init).toMatchObject({ cache: 'no-store' });
   });
 });

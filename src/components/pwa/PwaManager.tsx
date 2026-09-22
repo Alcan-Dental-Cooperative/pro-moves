@@ -3,17 +3,34 @@ import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 import { ToastAction } from '@/components/ui/toast';
-import { isPwaActive, isStandalone, registerPwaServiceWorker, applyPendingUpdate } from '@/lib/pwa';
+import {
+  isPwaActive,
+  isStandalone,
+  isPlatformPwaEligible,
+  registerPwaServiceWorker,
+  applyPendingUpdate,
+  unregisterAllServiceWorkers,
+} from '@/lib/pwa';
 import { InstallBanner } from './InstallBanner';
 import { InstalledAppNudge } from './InstalledAppNudge';
 
 /**
  * Orchestrates per-user PWA activation (docs/features/pwa-push-notifications.md D2):
  * when the signed-in user is flagged (staff.pwa_enabled or the pwa_v1
- * localStorage flag), registers the service worker and shows either the
+ * localStorage flag) AND on a mobile platform (or already running
+ * standalone), registers the service worker and shows either the
  * full-screen install takeover (install not yet confirmed) or the
  * already-installed browser nudge. The update toast is the reload path in
  * standalone mode, where there is no browser refresh button.
+ *
+ * Platform gate (stale-client-refresh-escape, item 4): the rollout flag
+ * alone is not enough -- a desktop browser must never register a service
+ * worker, because a stray one strands the tab on old cached builds after a
+ * deploy with no reliable way back (that incident is what this fix
+ * addresses). isMobilePlatform() checks the device, not the viewport, so a
+ * narrowed desktop window doesn't qualify. isStandalone() is the one
+ * exception: someone deliberately installed the app there, so it stays
+ * active regardless of platform.
  *
  * Install confirmation: standalone display mode is the only trustworthy
  * install signal (user agents are identical to the browser's on modern iOS
@@ -23,7 +40,25 @@ import { InstalledAppNudge } from './InstalledAppNudge';
  */
 export function PwaManager() {
   const { user, pwaEnabled, pwaInstalledAt } = useAuth();
-  const active = !!user && isPwaActive(pwaEnabled);
+  const flagged = !!user && isPwaActive(pwaEnabled);
+  const platformEligible = isPlatformPwaEligible();
+  const active = flagged && platformEligible;
+
+  // Self-heal (independent of login/flag state): any service worker left
+  // registered on a non-mobile, non-standalone platform from before this
+  // fix must go, so a previously-affected desktop recovers on its next
+  // successful load without waiting for the user to log back in.
+  useEffect(() => {
+    if (!platformEligible) {
+      // Restricted contexts (private browsing, locked-down policies) can
+      // reject serviceWorker.getRegistrations()/unregister() -- swallow
+      // rather than let it surface as an unhandled rejection on every
+      // desktop load.
+      unregisterAllServiceWorkers().catch((err) => {
+        console.debug('[pwa] self-heal unregister failed', err);
+      });
+    }
+  }, [platformEligible]);
 
   useEffect(() => {
     if (!active) return;
