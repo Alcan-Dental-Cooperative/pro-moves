@@ -14,6 +14,12 @@ export const INSTALLED_NUDGE_SNOOZE_DAYS = 7;
 
 let registered = false;
 let updateServiceWorker: ((reloadPage?: boolean) => Promise<void>) | null = null;
+// Set when the SW reports a new build waiting (onNeedRefresh); cleared once
+// applyPendingUpdate() hands it off. Lets callers (RouteErrorBoundary) tell
+// "an update is already downloaded, just activate it" apart from "nothing is
+// waiting, the stale worker itself has to go" -- calling updateServiceWorker()
+// with nothing waiting is a no-op that never reloads the page.
+let updateAvailable = false;
 
 // Captured at module load so we don't miss the (early-firing) Android install
 // prompt event before the banner mounts.
@@ -53,7 +59,15 @@ export function setDeviceOptOut(): void {
   }
 }
 
-/** The single gate: profile flag or local dev flag, minus device opt-out. */
+/**
+ * The rollout gate: profile flag or local dev flag, minus device opt-out.
+ * This is deliberately NOT platform-aware -- it's also read by
+ * useMobileShell (mobile-build-instructions.md ground rule 1), which
+ * combines it with viewport width on purpose. PwaManager, where actual
+ * service worker registration and install-surface rendering happen,
+ * additionally requires isMobilePlatform() || isStandalone() on top of
+ * this before treating the PWA as active (stale-client-refresh-escape).
+ */
 export function isPwaActive(profileEnabled: boolean): boolean {
   return !isDeviceOptedOut() && (profileEnabled || isLocallyFlagged());
 }
@@ -72,6 +86,29 @@ export function isIos(): boolean {
     /iphone|ipad|ipod/i.test(navigator.userAgent) ||
     (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
   );
+}
+
+/**
+ * Platform gate for PWA activation (stale-client-refresh-escape, item 4):
+ * a phone or tablet, not a browser window that merely happens to be narrow.
+ * Deliberately NOT viewport-based -- a resized desktop window must not
+ * register a sticky service worker. See PwaManager for where this combines
+ * with isStandalone() to decide whether to register/unregister.
+ */
+export function isMobilePlatform(): boolean {
+  return isIos() || /android/i.test(navigator.userAgent);
+}
+
+/**
+ * Whether PWA activation (service worker registration, install surfaces)
+ * is allowed here: a mobile platform, or standalone display mode regardless
+ * of platform -- someone deliberately installed it, so it keeps working
+ * even from, say, an iPad reporting as desktop Safari. Extracted as its own
+ * pure combinator so PwaManager's gating decision is unit-testable without
+ * mounting the component.
+ */
+export function isPlatformPwaEligible(): boolean {
+  return isMobilePlatform() || isStandalone();
 }
 
 /**
@@ -208,10 +245,47 @@ export async function registerPwaServiceWorker(onNeedRefresh: () => void): Promi
   const { registerSW } = await import('virtual:pwa-register');
   updateServiceWorker = registerSW({
     immediate: true,
-    onNeedRefresh,
+    onNeedRefresh: () => {
+      updateAvailable = true;
+      onNeedRefresh();
+    },
   });
 }
 
+/** Whether a new build has already downloaded and is waiting to activate. */
+export function hasPendingUpdate(): boolean {
+  return updateAvailable;
+}
+
 export function applyPendingUpdate(): void {
+  updateAvailable = false;
   updateServiceWorker?.(true);
+}
+
+/**
+ * Unregister every service worker registration for this origin. Used both
+ * to escape a stale worker that's serving old cached routes
+ * (RouteErrorBoundary) and to self-heal a desktop that registered one
+ * before platform gating existed (PwaManager). Safe to call when nothing is
+ * registered.
+ */
+export async function unregisterAllServiceWorkers(): Promise<void> {
+  if (!('serviceWorker' in navigator)) return;
+  const registrations = await navigator.serviceWorker.getRegistrations();
+  await Promise.all(registrations.map((registration) => registration.unregister()));
+}
+
+/**
+ * Delete workbox's own caches (the app-shell precache) so a reload after
+ * unregisterAllServiceWorkers() can't still serve old cached assets while
+ * the browser cache is warm. Best-effort: any cache API failure is
+ * swallowed by the caller, since the unregister + reload is what actually
+ * matters.
+ */
+export async function clearWorkboxCaches(): Promise<void> {
+  if (!('caches' in window)) return;
+  const keys = await caches.keys();
+  await Promise.all(
+    keys.filter((key) => key.startsWith('workbox-')).map((key) => caches.delete(key))
+  );
 }
