@@ -26,9 +26,15 @@ const PENDING_UPDATE_TIMEOUT_MS = 3000;
 // access inside componentDidCatch (locked-down browsers, block-all-cookies
 // settings) must never itself become the crash -- that would replace a
 // recoverable fallback screen with a blank one. Falls back to an in-memory
-// timestamp so the reload loop guard still works without sessionStorage;
-// it just stops surviving an actual page reload, which is an acceptable
-// trade next to "guard silently can't do its job."
+// timestamp so the MANUAL-click loop guard still works within a single page
+// instance without sessionStorage. It does NOT survive an actual page
+// reload (module state resets with the rest of the JS context), which is
+// why it is not trusted to guard the AUTOMATIC path at all -- see
+// isSessionStorageDurable() and componentDidCatch below. A manual click is
+// self-rate-limited by a human and still gated by the connectivity probe,
+// so it stays allowed even without durable storage; an unbounded loop can
+// only happen on the automatic path, across real reloads a broken deploy
+// keeps failing.
 let inMemoryReloadTimestamp: string | null = null;
 
 function readReloadTimestamp(): string | null {
@@ -45,6 +51,33 @@ function writeReloadTimestamp(value: string): void {
     sessionStorage.setItem(RELOAD_TIMESTAMP_KEY, value);
   } catch {
     /* sessionStorage unavailable -- the in-memory fallback above still guards */
+  }
+}
+
+const STORAGE_PROBE_KEY = '__route_error_boundary_storage_probe__';
+
+/**
+ * Whether sessionStorage will actually carry the loop-guard timestamp
+ * across a real reload -- not just whether it exists. Some browsers throw
+ * only on write (quota limits, certain privacy-mode policies) while reads
+ * quietly succeed, so a bare try/catch around one operation isn't enough; a
+ * real write-then-read-then-remove round trip is the only way to know.
+ *
+ * Used to gate the AUTOMATIC recover path only (componentDidCatch): without
+ * durable storage, the in-memory fallback above resets on every reload, so
+ * an auto-retry against a genuinely broken deploy (bad build, CDN
+ * propagation lag) would loop forever across real navigations, with no
+ * human in the loop to notice or stop it.
+ */
+function isSessionStorageDurable(): boolean {
+  try {
+    const probeValue = String(Date.now());
+    sessionStorage.setItem(STORAGE_PROBE_KEY, probeValue);
+    const ok = sessionStorage.getItem(STORAGE_PROBE_KEY) === probeValue;
+    sessionStorage.removeItem(STORAGE_PROBE_KEY);
+    return ok;
+  } catch {
+    return false;
   }
 }
 
@@ -118,11 +151,17 @@ export class RouteErrorBoundary extends Component<Props, State> {
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('RouteErrorBoundary caught error:', error, errorInfo);
     // Auto-recover once on a stale-build error (item 2): most users should
-    // never see this screen. attemptRefresh() itself owns the loop guard,
-    // so a genuine loop (the escape attempt fails and throws right back
-    // into this boundary within the guard window) falls through to showing
-    // the screen instead of retrying forever.
-    if (this.state.errorKind === 'chunk-update') {
+    // never see this screen. attemptRefresh() itself owns the loop guard
+    // within a single page instance, but the automatic path additionally
+    // requires isSessionStorageDurable() -- without storage that actually
+    // survives a reload, an auto-retry against a deploy that's still broken
+    // (bad build, CDN propagation lag) would loop forever across real
+    // navigations, since the in-memory fallback timestamp resets with the
+    // rest of module state on every reload. Without durable storage, this
+    // just renders the error screen and leaves the escape to the manual
+    // button, which is self-rate-limited by a human and still gated by the
+    // connectivity probe.
+    if (this.state.errorKind === 'chunk-update' && isSessionStorageDurable()) {
       this.attemptRefresh(true);
     }
   }

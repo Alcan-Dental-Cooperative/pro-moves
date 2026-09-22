@@ -360,15 +360,34 @@ describe('RouteErrorBoundary', () => {
       }
     });
 
-    it('does not throw when the chunk-update auto-recover fires with sessionStorage unavailable, and still escapes once', async () => {
+    // Gap closed after a second QA pass: the in-memory fallback timestamp
+    // dies on a real page reload (module state resets with it), so it can't
+    // be trusted to guard the AUTOMATIC path -- an auto-retry against a
+    // deploy that's still broken would loop forever across real
+    // navigations, with no human in the loop to notice. Without durable
+    // storage the automatic path must not fire at all; the manual button
+    // stays available since a human click is self-rate-limited and still
+    // gated by the connectivity probe.
+    it('does not auto-recover when sessionStorage is unusable -- the error screen renders and the manual button still works', async () => {
       const restore = blockSessionStorage();
       try {
         setOnline(true);
         vi.mocked(hasPendingUpdate).mockReturnValue(false);
-        expect(() => renderWithThrow('Failed to fetch dynamically imported module')).not.toThrow();
-        // The escape ran exactly once -- proves componentDidCatch neither
-        // crashed nor got stuck unable to tell "have I already tried this".
+        const { reload } = renderWithThrow('Failed to fetch dynamically imported module');
+
+        // No automatic escape without durable storage -- give any pending
+        // microtask a chance to run, then confirm nothing fired.
+        await Promise.resolve();
+        await Promise.resolve();
+        expect(unregisterAllServiceWorkers).not.toHaveBeenCalled();
+        expect(reload).not.toHaveBeenCalled();
+        expect(screen.queryByText('New Version Available')).not.toBeNull();
+
+        // The manual button still works: a human click is self-rate-limited,
+        // and still goes through the connectivity probe.
+        fireEvent.click(screen.getByRole('button', { name: /refresh page/i }));
         await waitFor(() => expect(unregisterAllServiceWorkers).toHaveBeenCalledTimes(1));
+        await waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
       } finally {
         restore();
       }
@@ -389,6 +408,39 @@ describe('RouteErrorBoundary', () => {
         expect(
           (screen.getByRole('button', { name: /just refreshed, retrying shortly/i }) as HTMLButtonElement).disabled
         ).toBe(true);
+      } finally {
+        restore();
+      }
+    });
+
+    it('never loops the automatic escape across a simulated reload cycle when storage stays blocked', async () => {
+      const restore = blockSessionStorage();
+      try {
+        setOnline(true);
+        vi.mocked(hasPendingUpdate).mockReturnValue(false);
+
+        // First "page load": the chunk-update error throws, auto-recover is
+        // attempted but declines (no durable storage).
+        const first = renderWithThrow('Failed to fetch dynamically imported module');
+        await Promise.resolve();
+        await Promise.resolve();
+        expect(unregisterAllServiceWorkers).not.toHaveBeenCalled();
+        first.unmount();
+
+        // A real reload resets the whole JS module graph, including the
+        // in-memory fallback timestamp -- simulate that explicitly, then
+        // mount a fresh boundary instance and throw the same error again,
+        // the way a still-broken deploy would.
+        __resetInMemoryReloadTimestampForTests();
+        renderWithThrow('Failed to fetch dynamically imported module');
+        await Promise.resolve();
+        await Promise.resolve();
+
+        // Still no automatic escape on the second "load" -- an unbounded
+        // loop would have called this at least once by now, and a fixed
+        // in-memory-only guard would have wrongly allowed exactly one more
+        // instead of zero.
+        expect(unregisterAllServiceWorkers).not.toHaveBeenCalled();
       } finally {
         restore();
       }
