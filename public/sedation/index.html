@@ -773,15 +773,15 @@ function ordinal(n) {
   return n + (ones === 1 ? "st" : ones === 2 ? "nd" : ones === 3 ? "rd" : "th");
 }
 
-/* Midazolam comes in three preparations. The dose in mg is identical across
-   all three; only the volume differs, because only the concentration differs.
-   The IV injectable forms are dye-free and are swallowed, not injected, which
-   is why they carry the same oral mg/kg range and the same 14 mg maximum.
-   Staff pick one, so the record names the preparation actually used. */
+/* Midazolam comes in three preparations, all swallowed; the IV injectable
+   forms are dye-free and are given orally, never injected. The oral syrup
+   carries a wider 0.3–1 mg/kg range (Dr. Alex, 2026-09-23); the IV forms
+   keep 0.3–0.5 mg/kg. All three share the 14 mg maximum. Staff pick one,
+   so the record names the preparation actually used. */
 const MIDAZOLAM_FORMS = [
-  { id: "syrup", name: "Midazolam Oral Syrup (2 mg/mL)", mlPerMg: 1 / 2, oralOnly: false },
-  { id: "iv1", name: "Midazolam IV injectable (1 mg/mL)", mlPerMg: 1, oralOnly: true },
-  { id: "iv5", name: "Midazolam IV injectable (5 mg/mL)", mlPerMg: 1 / 5, oralOnly: true }
+  { id: "syrup", name: "Midazolam Oral Syrup (2 mg/mL)", mlPerMg: 1 / 2, oralOnly: false, hiMgPerKg: 1 },
+  { id: "iv1", name: "Midazolam IV injectable (1 mg/mL)", mlPerMg: 1, oralOnly: true, hiMgPerKg: 0.5 },
+  { id: "iv5", name: "Midazolam IV injectable (5 mg/mL)", mlPerMg: 1 / 5, oralOnly: true, hiMgPerKg: 0.5 }
 ];
 const midazolamForm = () => MIDAZOLAM_FORMS.find(f => f.id === state.midazolam) || null;
 
@@ -795,9 +795,9 @@ function sedationList() {
       key: "midazolam",
       name: f ? f.name : "Midazolam",
       conc: f
-        ? (f.oralOnly ? "0.3–0.5 mg/kg · for oral use only" : "0.3–0.5 mg/kg")
+        ? (f.oralOnly ? "0.3–0.5 mg/kg · for oral use only" : "0.3–1 mg/kg")
         : "0.3–0.5 mg/kg · choose a preparation for volumes",
-      lo: 0.3, hi: 0.5, mlPerMg: f ? f.mlPerMg : null, volUnit: "mL",
+      lo: 0.3, hi: f ? f.hiMgPerKg : 0.5, mlPerMg: f ? f.mlPerMg : null, volUnit: "mL",
       max: "14 mg", maxDoseMg: 14, noVolume: !f
     },
     { key: "hydroxyzine", name: "Hydroxyzine", conc: "25 mg capsule · 0.5–1 mg/kg", lo: 0.5, hi: 1, mlPerMg: 1 / 25, volUnit: "caps", max: "50 mg", maxDoseMg: 50 }
