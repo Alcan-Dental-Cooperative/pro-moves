@@ -1,8 +1,43 @@
 # Ask Alcan Assistant (RAG + Tools)
 
-**Status:** v0.1 outline, 2026-08-13. Brainstorm output; not yet a build
-plan. Open questions for John at the bottom. Companion doc:
+**Status:** v0.3, updated 2026-09-24. Originally a v0.1 brainstorm
+(2026-08-13); the architecture was locked 2026-08-20. Companion doc:
 `pwa-push-notifications.md` (the app shell this assistant lives in).
+
+> **Decision 2026-09-24 (John): primary documents move to Google Drive.**
+> Basecamp is being replaced, so everywhere this doc says Basecamp is the
+> source of truth, read Google Drive. The corpus layer, retrieval, consent
+> model, and response contract are unchanged; only the primary-document
+> home and the sync mechanics move. Concretely:
+>
+> - **Housing:** a dedicated **Shared Drive** (not anyone's My Drive), so
+>   the org owns the files and nothing disappears when a person leaves.
+>   Folder structure mirrors corpus audience (all-staff / manager-only /
+>   doctor), and folders are shared to Google Workspace groups, which is
+>   already the access model in the hosting consolidation plan.
+> - **Migration is the curation:** only ledger keeps get moved into the
+>   Shared Drive, so Drive starts life curated. The Basecamp harvest
+>   ledger doubles as the migration manifest. `source_kind='basecamp'`
+>   rows are repointed to `'drive'` as their files land.
+> - **Sync:** the nightly job calls the Drive API instead of Basecamp's.
+>   Change detection uses Drive's per-file revision id / modified time,
+>   plus our own `content_hash` on the extracted text as before. Google
+>   Docs export clean text via the API; PDFs and videos keep the
+>   title-plus-link treatment until extraction/transcripts.
+> - **Auth:** a read-only service account added as a member of the Shared
+>   Drive (one new function secret). Simpler than the Basecamp OAuth app;
+>   open question I.5 below is resolved by this.
+> - **Version control:** Drive gives native per-file revision history,
+>   which Basecamp never did. We still keep the append-only
+>   `knowledge_document_versions` table, because it records what the bot
+>   actually ingested (the extracted text), and Drive can prune revisions
+>   on non-Google files.
+> - **Access rule for citations:** Drive ACLs decide who can open a file;
+>   corpus audience tags + RLS decide who can receive its content in an
+>   answer. Keep them aligned via the folder structure so a cited link
+>   never lands on "request access" for someone the bot just answered.
+>   Staff need Google accounts to follow citation links; fine, since
+>   Alcan is a Google shop.
 
 **The pitch in one line:** a chat surface inside Pro Moves where any staff
 member can ask how Alcan works ("what's the hygiene setup procedure," "what
@@ -14,7 +49,9 @@ Grounding facts: stack is Vite + React + Supabase. Supabase Postgres
 supports the `pgvector` extension. Claude-calling edge functions already
 exist and work (`extract-insights`, `format-reflection`,
 `transcribe-audio`), so the secret handling and invocation pattern is
-proven. Institutional knowledge lives today in Basecamp (which has an API).
+proven. Institutional knowledge lived in Basecamp at harvest time; its
+permanent home is the Google Drive Shared Drive (see the 2026-09-24
+decision above).
 Anthropic does not sell an embeddings API; Voyage AI (Anthropic's
 recommendation) or OpenAI embeddings fill that slot. Chat generation uses
 `claude-opus-5`.
@@ -50,14 +87,14 @@ database, every subsequent answer reflects the new text. Concretely:
 - The hard part is not updating; it is **knowing something changed**. Two
   mechanisms:
   1. **Sync, don't copy.** Documents are pulled from their source of truth
-     (Basecamp API for docs there; the Pro Moves DB for framework content)
-     by a scheduled job. Each `knowledge_documents` row stores a
+     (Drive API for the Shared Drive; the Pro Moves DB for framework
+     content) by a scheduled job. Each `knowledge_documents` row stores a
      `content_hash`; the nightly sync re-ingests only rows whose source hash
      changed. Hand-pasted copies are what rot; synced sources cannot drift.
   2. **Ownership.** Each document has an owner and the corpus is a curated
-     allowlist, so "update the policy" means editing the canonical Basecamp
-     doc like today, and the bot follows within a day (or immediately via a
-     manual "re-sync now" button on the admin surface).
+     allowlist, so "update the policy" means editing the canonical Google
+     Doc, and the bot follows within a day (or immediately via a manual
+     "re-sync now" button on the admin surface).
 - Optional but cheap insurance, matching the `framework_history` ethos: an
   append-only `knowledge_document_versions` table capturing each ingested
   text + hash + timestamp. That gives an audit trail ("what did the bot
@@ -74,8 +111,10 @@ argues for a small curated corpus over a scrape-everything corpus.
 
 ## C. Data model (new tables, additive only)
 
-- `knowledge_documents`: id, source ('basecamp' | 'manual' | 'pro_moves'),
-  source_ref (Basecamp doc id / URL), title, owner_staff_id, audience
+- `knowledge_documents`: id, source ('drive' | 'basecamp' | 'manual' |
+  'pro_moves'; 'basecamp' is transitional and empties out as files migrate),
+  source_ref (Drive file id, stable across rename/move), title,
+  owner_staff_id, audience
   (role/scope tags for RLS), content_hash, active, created_at, updated_at.
 - `knowledge_chunks`: id, document_id (FK, cascade delete), chunk_index,
   content, embedding vector(1024), tsv (generated tsvector for keyword
@@ -138,10 +177,12 @@ System prompt commitments, enforced by the curated corpus + logging:
 
 ## G. Corpus curation (the real work)
 
-- Phase 0 is a content audit: pick 20-50 canonical documents from Basecamp,
-  assign owners, tag audiences. Announcements, comment threads, and
-  duplicates stay out. The bot's quality ceiling is set here, not in code.
-- Basecamp sync via its API for the chosen docs (nightly + manual re-sync).
+- Phase 0 was the content audit: the Basecamp harvest (1,320 items, 681
+  recommended keeps) with owners and audiences assigned during John's
+  ledger review. Announcements, comment threads, and duplicates stay out.
+  The bot's quality ceiling is set here, not in code.
+- Kept documents migrate into the Shared Drive; Drive sync via its API
+  (nightly + manual re-sync).
 - Pro Move learning materials (`pro_move_resources`) can be ingested as a
   source too, giving the assistant the framework's own scripts and examples
   with zero copying.
@@ -173,8 +214,9 @@ System prompt commitments, enforced by the curated corpus + logging:
 4. Embeddings vendor: Voyage (Anthropic's recommendation) vs OpenAI. Either
    works; this adds one new API key to edge function secrets. Any
    preference?
-5. Is Basecamp API access straightforward to provision (admin OAuth app on
-   the Alcan account), or is doc export more practical to start?
+5. ~~Is Basecamp API access straightforward to provision?~~ **Resolved
+   2026-09-24:** Basecamp is being replaced; primary docs move to a Google
+   Drive Shared Drive and sync runs through a read-only service account.
 6. Alcan-only feature for now (like surveys), or designed multi-tenant from
    day one (`owner_org_id` on knowledge tables)? Default assumption:
    schema is org-aware from the start since it is cheap, UI gated to Alcan.
