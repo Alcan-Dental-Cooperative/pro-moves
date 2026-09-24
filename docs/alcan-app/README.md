@@ -1,7 +1,10 @@
 # The Alcan App — initiative home
 
-**Status:** v0.1 synthesis, 2026-09-24. Direction set by Tim (CEO) in
+**Status:** v0.2, 2026-09-24. Direction set by Tim (CEO) in
 conversation with John; synthesized here against all prior planning.
+Build plan v1 reviewed and largely approved by Tim and Dr. Alex
+(2026-09-24) — checkpoint 1 is substantially passed, with the app's
+name and domain still open with Tim.
 **Owner:** John. **Executive checkpoints:** Tim (direction, brand,
 behavior), Dr. Alex (clinical content, permissions affecting doctors).
 
@@ -40,7 +43,17 @@ bones stay, the front door and identity change.
 5. **Conservative migration.** New surfaces build alongside live ones;
    nothing breaks for staff mid-transition (house rule, see
    project CLAUDE.md).
-6. **The Basecamp exit is one coordinated retirement.** Basecamp does two
+6. **Use what we already pay for.** Alcan is a Google Workspace
+   organization. Before building or buying any supporting capability,
+   check whether Workspace's built-in tools (Drive, Docs, Gemini, Apps
+   Script, Forms) do the job well — not just for social media
+   submissions but anywhere in the plan. Candidates worth evaluating as
+   phases arrive: Gemini auto-captioning/tagging incoming social media
+   uploads, leadership authoring feed posts and Vitals-style letters in
+   Docs, Apps Script automations on the Shared Drive. This complements
+   proven-over-scratch; it does not override product judgment (added
+   2026-09-24, John).
+7. **The Basecamp exit is one coordinated retirement.** Basecamp does two
    jobs: documents and communication. Documents move to the Google Drive
    Shared Drive (decided 2026-09-24, see the Ask doc); communication
    moves to the new communication layer. Plan them together, retire
@@ -84,11 +97,34 @@ bones stay, the front door and identity change.
   staff feed: leadership announcements with comments and reactions,
   targeted by location and role, with read-tracking for must-reads.
   Person-to-person chat and DMs stay out of the app entirely (texting
-  and Google Chat already exist for that, and keeping DMs out avoids
-  the moderation and HR-liability surface). Remaining open: adopt vs
-  build for the feed components (research memo to follow).
-- Sign-in direction: whether staff identity moves toward Google accounts
-  (Workspace groups are already the access model in the hosting plan).
+  already exists for that, and keeping DMs out avoids the moderation
+  and HR-liability surface). Remaining open: adopt vs build for the
+  feed components (research memo in `research/`). Design input exists:
+  a concept-art exploration of the feed ("News" tab as a briefing, not
+  a social stream; must-see posts with acknowledgment; a monthly
+  "Vitals" letter from Tim; founder composer with audience targeting)
+  lives at https://claude.ai/artifact/CAitf6tbftxrSiVSTdyzSH — treat
+  it as input to the design checkpoint, not gospel.
+- ~~Sign-in direction~~ **Answered 2026-09-24 (John): most staff do NOT
+  get Google Workspace accounts, and won't.** Assistants don't need
+  Google email addresses. Consequences, folded into the build plan v2:
+  - App sign-in stays app-native (the existing Supabase auth). No
+    Google SSO dependency anywhere in the plan.
+  - The app is the staff-facing **reading surface** for documents. Drive
+    is where leadership (who have accounts) edits and organizes; staff
+    read document content inside the app, served from the nightly-sync
+    copies. Ask citations open the in-app view, not a Drive link that
+    would hit a login wall for most staff.
+  - The hosting plan's "Workspace groups as the membership list" idea
+    applies to infrastructure/admin access only; app membership stays
+    the staff table.
+  - The "Google Chat sidecar" is only real for account holders (mostly
+    leadership). Staff-to-staff quick chatter stays texting, outside
+    the app. The no-DMs decision stands.
+  - Social media submissions are unaffected: files land in Drive via
+    our backend's service account; staff never touch a Google login.
+- Whether the company Google Shared Drive exists yet is unconfirmed
+  (John, 2026-09-24). Phase 0/2 groundwork: verify or create it.
 - Timing of the Lovable → Cloudflare move relative to the shell rebuild.
 
 ## What's in this folder

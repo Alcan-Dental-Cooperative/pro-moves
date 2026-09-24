@@ -21,13 +21,18 @@ phased build plan v1 for John's review.
   empty `pro-moves`, facts live under `skill-flow-pro`).
 
 ## Next
-- John reviews the build plan artifact and answers open questions (he
-  said he would right after this checkpoint). Fold his answers into
-  `docs/alcan-app/README.md` and republish build-plan.html v2 to the
-  SAME artifact URL (same file path from a new session: pass the URL as
-  `url` to the Artifact tool).
-- Then: schedule the Tim & Alex checkpoint 1 review; after sign-off,
-  spec Phase 0 items via /spec.
+- DONE 2026-09-24 (second session): John answered the open questions;
+  README bumped to v0.2 and build-plan.html v2 republished to the same
+  artifact URL. Answers folded in: most staff do NOT get Google
+  accounts (plan reworked so nothing staff-facing needs one; app is
+  the in-app reading surface for Drive docs); Tim & Alex reviewed and
+  largely approved plan v1 (checkpoint 1 substantially passed, name/
+  domain still open); Shared Drive existence unconfirmed (phase 0
+  verifies/creates); new ground rule: consider Gemini/Google Workspace
+  tools anywhere they streamline. Feed concept art noted (briefing-
+  style News tab + Vitals): https://claude.ai/artifact/CAitf6tbftxrSiVSTdyzSH
+- Next: John merges PRs #129, #132, #133; land the name/domain with
+  Tim; then spec Phase 0 items via /spec.
 
 ## Files that matter
 `docs/alcan-app/README.md` — initiative home; decisions live here
@@ -39,11 +44,13 @@ proven-over-scratch calls
 
 ## Open questions
 - App name and domain (Tim, checkpoint 1).
-- Does every staff member (incl. part-timers) get a Google Workspace
-  identity? Plan leans on it.
+- ~~Google Workspace identity~~ ANSWERED 2026-09-24: most staff do not
+  get Google accounts; plan reworked accordingly (see README v0.2).
 - Feed build approach: recommended small build on our stack; alternative
-  (GetStream free tier) documented in research memo.
+  (GetStream free tier) documented in research memo. Concept art exists
+  (briefing direction), input to design checkpoint.
 - Hosting-move timing: recommended complete before Phase 3.
+- Does the Google Shared Drive exist yet? Unconfirmed; phase 0 item.
 - Three open PRs await John's merge: #129, #132, #133.
 - Six stale unmerged local branches need keep-or-kill (list in c0 node
   "stale unmerged local branches"); nothing blocks on them.

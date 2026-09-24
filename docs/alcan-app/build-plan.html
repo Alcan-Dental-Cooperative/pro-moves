@@ -199,7 +199,7 @@
 
 <div class="page">
   <header>
-    <div class="eyebrow">Alcan Dental Cooperative · Initiative plan · v1 draft</div>
+    <div class="eyebrow">Alcan Dental Cooperative · Initiative plan · v2</div>
     <h1>The Alcan App</h1>
     <p class="standfirst">One app that is the front door to work life at Alcan.
     Staff open it to catch up on what's happening, do their Pro Moves work, ask
@@ -208,7 +208,7 @@
     <div class="meta">
       <span><strong>Prepared</strong> Sept 24, 2026</span>
       <span><strong>Owner</strong> John</span>
-      <span><strong>Reviewers</strong> Tim · Dr. Alex</span>
+      <span><strong>Status</strong> Reviewed &amp; largely approved by Tim and Dr. Alex</span>
       <span><strong>Starting point</strong> Pro Moves as it runs today</span>
     </div>
   </header>
@@ -234,6 +234,8 @@
       <div class="principle"><b>Alcan on top, platform underneath</b><span>The platform stays multi-practice under the hood (Avenue runs on it). The Alcan App is Alcan's branded front door, never a fork.</span></div>
       <div class="principle"><b>Feed, not forum, not chat</b><span>The communication layer is a staff feed: announcements with comments and read-tracking. Person-to-person chat deliberately stays out of the app.</span></div>
       <div class="principle"><b>Retire Basecamp once</b><span>Basecamp's two jobs, documents and communication, each get a new home. We turn Basecamp off one time, when both are ready.</span></div>
+      <div class="principle"><b>Use what we already pay for</b><span>Alcan runs on Google Workspace. Before building or buying any supporting piece, we check whether Drive, Docs, Gemini, or Apps Script already does it well — everywhere in the plan, not just social media.</span></div>
+      <div class="principle"><b>The app is the staff sign-in</b><span>Most staff don't have Google accounts and won't get them. Staff sign in to the app the way they do today; anything Google-powered runs behind the scenes, never behind a Google login staff don't have.</span></div>
     </div>
     <div class="legend">
       Ingredient labels used below:
@@ -254,11 +256,11 @@
           <p class="goal">Get sign-off and set up the ground the rest stands on. Nothing staff-visible.</p>
           <h3 class="q">What happens</h3>
           <ul>
-            <li>Review this plan with Tim and Alex; agree the app's name and web address (mypromoves.com stops being the right name for an app called Alcan).</li>
-            <li>Create the company Google Shared Drive with its folder structure, and confirm every staff member gets a Google Workspace identity. Several later pieces lean on this.</li>
+            <li><b>Done:</b> Tim and Alex reviewed this plan and largely approved it (Sept 24). Still to land with Tim: the app's name and web address (mypromoves.com stops being the right name for an app called Alcan).</li>
+            <li>Verify the company Google Shared Drive exists, and create it with its folder structure if not. It's the document home for phases 2 and 4 — but only leadership needs Google accounts to run it. Staff don't get Google accounts (settled Sept 24), and nothing later in the plan requires them to.</li>
             <li>Settle the feed approach from the research memo (recommendation: build small on our own stack, using proven parts).</li>
           </ul>
-          <div class="checkpoint"><span class="flag">Checkpoint · Tim &amp; Alex</span><span>This plan, the name, and the design direction, before real build starts.</span></div>
+          <div class="checkpoint"><span class="flag">Checkpoint · Tim</span><span>The name and web address, plus the design direction, before real build starts.</span></div>
         </div>
       </div>
 
@@ -270,7 +272,7 @@
           <h3 class="q">What happens</h3>
           <ul>
             <li>A deliberate redesign of the app's navigation. Today's desktop nav grew one item per feature; this phase reorganizes everything into the layout proven employee apps converge on: Home, Community, Hub, My Growth, Profile, with a matching full desktop layout.</li>
-            <li>The Hub launches with tiles for Done Desk, ADP, Uptime, Deputy, and the location Google Chat Spaces: one tap out to everything else.</li>
+            <li>The Hub launches with tiles for Done Desk, ADP, Uptime, and Deputy: one tap out to everything else. Google Chat tiles appear only for the folks who have Google accounts (mostly leadership); everyone else's quick back-and-forth stays where it already lives, texting.</li>
             <li>Design mockups first, build second.</li>
           </ul>
           <h3 class="q">What staff notice</h3>
@@ -289,11 +291,12 @@
           <ul>
             <li>The curated keeper documents from the Basecamp harvest move into the Shared Drive, organized by who's allowed to see what. Your sorting ledger is the moving checklist.</li>
             <li>Ask Alcan's nightly sync repoints from Basecamp to Drive, so editing a Google Doc updates the bot's knowledge within a day.</li>
+            <li>Since most staff have no Google account, the app itself becomes their reading room: tapping a citation opens the document inside the app, rendered from the same synced copy the bot reads. Drive is where leadership writes and organizes; the app is where staff read. Nobody ever hits a Google login wall.</li>
             <li>Expert sign-off on the corpus finishes, and Ask opens to a pilot group beyond the current test gate.</li>
           </ul>
           <h3 class="q">What staff notice</h3>
-          <p>The pilot group gets Ask Alcan: type a question, get a cited answer, tap the citation to open the actual policy doc.</p>
-          <div class="chips"><span class="chip live">Ask answer engine</span><span class="chip planned">Drive as document home</span><span class="chip new">Drive sync</span></div>
+          <p>The pilot group gets Ask Alcan: type a question, get a cited answer, tap the citation to read the actual policy, right there in the app.</p>
+          <div class="chips"><span class="chip live">Ask answer engine</span><span class="chip planned">Drive as document home</span><span class="chip new">Drive sync + in-app reader</span></div>
           <div class="checkpoint"><span class="flag">Checkpoint · Tim &amp; Alex</span><span>Who can see what, and what Ask will and won't answer. Alex owns the clinical content call.</span></div>
         </div>
       </div>
@@ -307,7 +310,8 @@
           <ul>
             <li>Push notifications go live (already fully planned), because a feed nobody is told about is a bulletin board in a basement.</li>
             <li>The staff feed is built: posts from leadership and locations, comments and reactions underneath, and read-tracking on the must-reads ("12 of 15 have acknowledged"). Audiences by location and role.</li>
-            <li>No chat, no direct messages, by design. Quick back-and-forth stays in Google Chat, one tap away in the Hub, where retention and moderation are Google's problem, not ours.</li>
+            <li>Concept art already exists for this screen (the "News tab" exploration: a calm briefing rather than a social stream, must-see posts you tap "Got it" on, and a monthly "Vitals" letter from Tim). It's a design input for the checkpoint below, not a committed spec.</li>
+            <li>No chat, no direct messages, by design. Quick back-and-forth stays where it already happens: texting for most staff, Google Chat for the leaders who have accounts. Either way, retention and moderation never become the app's problem.</li>
             <li>Pilot at one location, tune, roll out, then retire Basecamp.</li>
           </ul>
           <h3 class="q">What staff notice</h3>
@@ -325,8 +329,9 @@
           <h3 class="q">What happens</h3>
           <ul>
             <li>A submit screen: pick photos or video, add a note, hit send. Files land directly in a dedicated Shared Drive folder for the social media manager.</li>
-            <li>Uploads run in the background with a progress bar, because chairside wifi and 2-gigabyte videos are both real.</li>
+            <li>Uploads run in the background with a progress bar, because chairside wifi and 2-gigabyte videos are both real. Staff never need a Google login; the files travel through our backend into Drive.</li>
             <li>This reuses the exact Drive plumbing phase 2 builds, which is why it's cheap and why it comes after.</li>
+            <li>Worth evaluating here (we already pay for it): Gemini auto-describing and tagging each arrival, so the social manager's folder sorts itself instead of filling with IMG_4021.mov.</li>
           </ul>
           <div class="chips"><span class="chip planned">Drive plumbing from phase 2</span><span class="chip new">submit flow</span></div>
         </div>
@@ -377,20 +382,29 @@
   </section>
 
   <section class="block">
+    <h2>Settled since v1</h2>
+    <ul class="open-list">
+      <li><b>The plan itself.</b> Tim and Alex reviewed v1 and largely approved it (Sept 24).</li>
+      <li><b>Workspace identities.</b> Most staff do not get Google accounts, and won't. The plan above has been reworked so nothing staff-facing depends on one: sign-in stays the app's own, documents are read inside the app, and Google does its work behind the scenes.</li>
+    </ul>
+  </section>
+
+  <section class="block">
     <h2>Still open</h2>
     <ul class="open-list">
       <li><b>The name and domain.</b> Phase 0's headline decision, with Tim.</li>
-      <li><b>Workspace identities.</b> Whether every staff member, including part-timers, gets a Google account. If not, parts of this plan need a rethink.</li>
-      <li><b>Feed build approach.</b> Recommendation is a small build on our own stack; the honest alternative (a feed service's free tier) is in the research memo.</li>
+      <li><b>Feed build approach.</b> Recommendation is a small build on our own stack; the honest alternative (a feed service's free tier) is in the research memo. Concept art for the briefing-style News tab exists and feeds the design checkpoint.</li>
+      <li><b>Whether the Shared Drive exists yet.</b> Unconfirmed; phase 0 verifies or creates it.</li>
       <li><b>Exact hosting-move timing.</b> Recommended before phase 3; the rehearsal on Summit will tell us how confident to be.</li>
+      <li><b>Where else Google earns a place.</b> A standing question at each phase, per the new ground rule: Gemini for social-upload tagging, Docs for authoring posts and Vitals, Apps Script on the Shared Drive.</li>
     </ul>
   </section>
 
   <div class="footer-note">
-    Draft v1 for review. Companion documents in the repo:
+    v2, updated after Tim &amp; Alex's review. Companion documents in the repo:
     <code>docs/alcan-app/README.md</code> (the synthesis and principles) and
     <code>docs/alcan-app/research/proven-platforms.md</code> (the research this
-    plan leans on, with sources). Questions and challenges welcome; that's what
-    this draft is for.
+    plan leans on, with sources). Questions and challenges still welcome, any
+    time before a phase builds.
   </div>
 </div>
