@@ -1,0 +1,396 @@
+<title>Alcan App Build Plan</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@500;600;700;800&family=Public+Sans:ital,wght@0,400;0,600;0,700;1,400&display=swap">
+<style>
+  :root {
+    --bg: #F5F8FA;
+    --surface: #FFFFFF;
+    --ink: #1B2B3A;
+    --navy: #113B62;
+    --blue: #005286;
+    --blue-soft: #E5EFF6;
+    --muted: #5B6C7C;
+    --border: #D9E2EA;
+    --wash: #EDF3F8;
+    --amber: #A96518;
+    --amber-bg: #FBF3E7;
+    --amber-border: #E8CFA8;
+    --live: #2E7D5B;
+    --live-bg: #E7F3ED;
+    --spine: #C4D2DE;
+    --shadow: 0 1px 3px rgba(17, 59, 98, 0.07);
+  }
+  :root:not([data-theme="light"]) { }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0E1720;
+      --surface: #17242F;
+      --ink: #E4ECF3;
+      --navy: #BAD3EA;
+      --blue: #5FA8DC;
+      --blue-soft: #16334A;
+      --muted: #92A4B4;
+      --border: #2B3B48;
+      --wash: #1C2B38;
+      --amber: #DFA35F;
+      --amber-bg: #2E2415;
+      --amber-border: #57431F;
+      --live: #5FBF97;
+      --live-bg: #17352A;
+      --spine: #33465A;
+      --shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0E1720;
+    --surface: #17242F;
+    --ink: #E4ECF3;
+    --navy: #BAD3EA;
+    --blue: #5FA8DC;
+    --blue-soft: #16334A;
+    --muted: #92A4B4;
+    --border: #2B3B48;
+    --wash: #1C2B38;
+    --amber: #DFA35F;
+    --amber-bg: #2E2415;
+    --amber-border: #57431F;
+    --live: #5FBF97;
+    --live-bg: #17352A;
+    --spine: #33465A;
+    --shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Public Sans", -apple-system, "Segoe UI", sans-serif;
+    font-size: 16px;
+    line-height: 1.62;
+  }
+  .page { max-width: 46rem; margin: 0 auto; padding: 3.5rem 1.25rem 5rem; }
+
+  h1, h2, h3 {
+    font-family: "Hanken Grotesk", "Public Sans", -apple-system, sans-serif;
+    color: var(--navy);
+    text-wrap: balance;
+    line-height: 1.15;
+  }
+  h1 { font-size: 2.6rem; font-weight: 800; margin: 0.4rem 0 1rem; letter-spacing: -0.015em; }
+  h2 { font-size: 1.45rem; font-weight: 700; margin: 0 0 0.75rem; }
+  h3 { font-size: 1.05rem; font-weight: 700; margin: 0 0 0.35rem; }
+  p { margin: 0 0 1rem; }
+  a { color: var(--blue); }
+
+  .eyebrow {
+    font-family: "Hanken Grotesk", sans-serif;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--blue);
+  }
+  .standfirst { font-size: 1.14rem; color: var(--ink); max-width: 42rem; }
+  .meta {
+    display: flex; flex-wrap: wrap; gap: 0.5rem 1.5rem;
+    font-size: 0.82rem; color: var(--muted);
+    padding: 0.9rem 0 0;
+    border-top: 1px solid var(--border);
+    margin-top: 1.5rem;
+  }
+  .meta strong { color: var(--ink); font-weight: 600; }
+
+  section.block { margin-top: 3rem; }
+
+  .principles {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+    gap: 0.75rem;
+    margin-top: 1.1rem;
+  }
+  .principle {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0.85rem 1rem;
+    box-shadow: var(--shadow);
+  }
+  .principle b { display: block; font-family: "Hanken Grotesk", sans-serif; color: var(--navy); margin-bottom: 0.15rem; }
+  .principle span { font-size: 0.88rem; color: var(--muted); }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center; margin: 1.2rem 0 0; font-size: 0.82rem; color: var(--muted); }
+
+  .chip {
+    display: inline-block;
+    font-family: "Hanken Grotesk", sans-serif;
+    font-size: 0.72rem; font-weight: 700;
+    letter-spacing: 0.04em;
+    padding: 0.14rem 0.6rem;
+    border-radius: 99px;
+    white-space: nowrap;
+  }
+  .chip.live { background: var(--live-bg); color: var(--live); }
+  .chip.planned { background: var(--blue-soft); color: var(--blue); }
+  .chip.new { background: transparent; color: var(--navy); border: 1px solid var(--spine); }
+
+  /* Timeline */
+  .timeline { position: relative; margin-top: 2rem; padding-left: 2.6rem; }
+  .timeline::before {
+    content: "";
+    position: absolute; left: 0.95rem; top: 0.5rem; bottom: 0.5rem;
+    width: 2px; background: var(--spine);
+  }
+  .phase { position: relative; margin-bottom: 2.2rem; }
+  .phase:last-child { margin-bottom: 0; }
+  .node {
+    position: absolute; left: -2.6rem; top: 0.1rem;
+    width: 2rem; height: 2rem;
+    border-radius: 50%;
+    background: var(--navy);
+    color: var(--bg);
+    font-family: "Hanken Grotesk", sans-serif;
+    font-weight: 800; font-size: 0.95rem;
+    display: flex; align-items: center; justify-content: center;
+  }
+  :root[data-theme="dark"] .node, .node { /* token-driven; no extra rules needed */ }
+  .phase.track .node { background: var(--surface); color: var(--blue); border: 2px solid var(--blue); }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.3rem 1.4rem 1.1rem;
+    box-shadow: var(--shadow);
+  }
+  .phase.track .card { border-style: dashed; }
+  .card .goal { color: var(--muted); font-size: 0.95rem; margin: -0.35rem 0 0.9rem; }
+  .card h3.q { margin-top: 0.9rem; font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--blue); }
+  .card ul { margin: 0 0 0.6rem; padding-left: 1.2rem; }
+  .card li { margin-bottom: 0.3rem; }
+  .chips { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.2rem 0 0.4rem; }
+
+  .checkpoint {
+    display: flex; gap: 0.6rem; align-items: baseline;
+    background: var(--amber-bg);
+    border: 1px solid var(--amber-border);
+    border-radius: 8px;
+    padding: 0.6rem 0.85rem;
+    margin: 0.9rem 0 0.2rem;
+    font-size: 0.9rem;
+  }
+  .checkpoint .flag {
+    font-family: "Hanken Grotesk", sans-serif;
+    font-weight: 800; font-size: 0.72rem;
+    letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--amber);
+    white-space: nowrap;
+  }
+
+  .footer-note { margin-top: 3rem; padding-top: 1.2rem; border-top: 1px solid var(--border); font-size: 0.85rem; color: var(--muted); }
+  .open-list li { margin-bottom: 0.45rem; }
+
+  @media (max-width: 480px) {
+    h1 { font-size: 2rem; }
+    .page { padding-top: 2.2rem; }
+    .timeline { padding-left: 2.2rem; }
+    .node { left: -2.2rem; width: 1.7rem; height: 1.7rem; font-size: 0.85rem; }
+  }
+</style>
+
+<div class="page">
+  <header>
+    <div class="eyebrow">Alcan Dental Cooperative · Initiative plan · v1 draft</div>
+    <h1>The Alcan App</h1>
+    <p class="standfirst">One app that is the front door to work life at Alcan.
+    Staff open it to catch up on what's happening, do their Pro Moves work, ask
+    questions and get real answers, submit content, and jump to every other tool
+    they use. Pro Moves becomes a feature of the Alcan App, not the container.</p>
+    <div class="meta">
+      <span><strong>Prepared</strong> Sept 24, 2026</span>
+      <span><strong>Owner</strong> John</span>
+      <span><strong>Reviewers</strong> Tim · Dr. Alex</span>
+      <span><strong>Starting point</strong> Pro Moves as it runs today</span>
+    </div>
+  </header>
+
+  <section class="block">
+    <h2>Where we start</h2>
+    <p>This is not a rebuild. The platform staff use every week keeps running
+    untouched while each phase adds around it. Much of the Alcan App already
+    exists: the coaching loop is live, the Ask Alcan answer engine is built and
+    being tested, and push notifications are already planned. The genuinely new
+    pieces are the staff feed, the social content drop-box, and the connections
+    to the other tools.</p>
+    <p>Every phase below ends the same way: something working that we
+    demonstrate to Tim and Alex on a real phone, not a document.</p>
+  </section>
+
+  <section class="block">
+    <h2>Ground rules for the whole build</h2>
+    <div class="principles">
+      <div class="principle"><b>Never break Tuesday</b><span>New surfaces are built alongside the current ones. Staff never lose a working feature mid-transition.</span></div>
+      <div class="principle"><b>Proven over scratch</b><span>Every new capability copies a pattern that already works elsewhere, backed by a research memo. We assemble proven parts; we don't invent.</span></div>
+      <div class="principle"><b>One app, both screens</b><span>Phone-first web app you install from the browser, and a full desktop experience. No app store, nothing changes that.</span></div>
+      <div class="principle"><b>Alcan on top, platform underneath</b><span>The platform stays multi-practice under the hood (Avenue runs on it). The Alcan App is Alcan's branded front door, never a fork.</span></div>
+      <div class="principle"><b>Feed, not forum, not chat</b><span>The communication layer is a staff feed: announcements with comments and read-tracking. Person-to-person chat deliberately stays out of the app.</span></div>
+      <div class="principle"><b>Retire Basecamp once</b><span>Basecamp's two jobs, documents and communication, each get a new home. We turn Basecamp off one time, when both are ready.</span></div>
+    </div>
+    <div class="legend">
+      Ingredient labels used below:
+      <span class="chip live">live today</span>
+      <span class="chip planned">already planned</span>
+      <span class="chip new">new build</span>
+    </div>
+  </section>
+
+  <section class="block">
+    <h2>The phases</h2>
+    <div class="timeline">
+
+      <div class="phase">
+        <div class="node">0</div>
+        <div class="card">
+          <h3>Decisions and groundwork</h3>
+          <p class="goal">Get sign-off and set up the ground the rest stands on. Nothing staff-visible.</p>
+          <h3 class="q">What happens</h3>
+          <ul>
+            <li>Review this plan with Tim and Alex; agree the app's name and web address (mypromoves.com stops being the right name for an app called Alcan).</li>
+            <li>Create the company Google Shared Drive with its folder structure, and confirm every staff member gets a Google Workspace identity. Several later pieces lean on this.</li>
+            <li>Settle the feed approach from the research memo (recommendation: build small on our own stack, using proven parts).</li>
+          </ul>
+          <div class="checkpoint"><span class="flag">Checkpoint · Tim &amp; Alex</span><span>This plan, the name, and the design direction, before real build starts.</span></div>
+        </div>
+      </div>
+
+      <div class="phase">
+        <div class="node">1</div>
+        <div class="card">
+          <h3>The front door</h3>
+          <p class="goal">One clean shell around everything that already exists.</p>
+          <h3 class="q">What happens</h3>
+          <ul>
+            <li>A deliberate redesign of the app's navigation. Today's desktop nav grew one item per feature; this phase reorganizes everything into the layout proven employee apps converge on: Home, Community, Hub, My Growth, Profile, with a matching full desktop layout.</li>
+            <li>The Hub launches with tiles for Done Desk, ADP, Uptime, Deputy, and the location Google Chat Spaces: one tap out to everything else.</li>
+            <li>Design mockups first, build second.</li>
+          </ul>
+          <h3 class="q">What staff notice</h3>
+          <p>The app gets a new coat of paint and a simpler layout. Everything they already use still works, in a more obvious place, plus one screen that links to every other work tool.</p>
+          <div class="chips"><span class="chip live">all current features</span><span class="chip planned">brand kit &amp; design tokens</span><span class="chip new">shell + hub</span></div>
+          <div class="checkpoint"><span class="flag">Checkpoint · Tim</span><span>Look, feel, and layout, approved on mockups before we build.</span></div>
+        </div>
+      </div>
+
+      <div class="phase">
+        <div class="node">2</div>
+        <div class="card">
+          <h3>The library</h3>
+          <p class="goal">Basecamp exit, part one: documents move to their permanent home.</p>
+          <h3 class="q">What happens</h3>
+          <ul>
+            <li>The curated keeper documents from the Basecamp harvest move into the Shared Drive, organized by who's allowed to see what. Your sorting ledger is the moving checklist.</li>
+            <li>Ask Alcan's nightly sync repoints from Basecamp to Drive, so editing a Google Doc updates the bot's knowledge within a day.</li>
+            <li>Expert sign-off on the corpus finishes, and Ask opens to a pilot group beyond the current test gate.</li>
+          </ul>
+          <h3 class="q">What staff notice</h3>
+          <p>The pilot group gets Ask Alcan: type a question, get a cited answer, tap the citation to open the actual policy doc.</p>
+          <div class="chips"><span class="chip live">Ask answer engine</span><span class="chip planned">Drive as document home</span><span class="chip new">Drive sync</span></div>
+          <div class="checkpoint"><span class="flag">Checkpoint · Tim &amp; Alex</span><span>Who can see what, and what Ask will and won't answer. Alex owns the clinical content call.</span></div>
+        </div>
+      </div>
+
+      <div class="phase">
+        <div class="node">3</div>
+        <div class="card">
+          <h3>The feed</h3>
+          <p class="goal">Basecamp exit, part two: communication moves in, and Basecamp turns off.</p>
+          <h3 class="q">What happens</h3>
+          <ul>
+            <li>Push notifications go live (already fully planned), because a feed nobody is told about is a bulletin board in a basement.</li>
+            <li>The staff feed is built: posts from leadership and locations, comments and reactions underneath, and read-tracking on the must-reads ("12 of 15 have acknowledged"). Audiences by location and role.</li>
+            <li>No chat, no direct messages, by design. Quick back-and-forth stays in Google Chat, one tap away in the Hub, where retention and moderation are Google's problem, not ours.</li>
+            <li>Pilot at one location, tune, roll out, then retire Basecamp.</li>
+          </ul>
+          <h3 class="q">What staff notice</h3>
+          <p>Home becomes a real feed. Announcements arrive as notifications on their phone, and Basecamp quietly disappears.</p>
+          <div class="chips"><span class="chip planned">push notifications</span><span class="chip new">feed + read-tracking</span></div>
+          <div class="checkpoint"><span class="flag">Checkpoint · Tim</span><span>Posting rules: who can post org-wide, what counts as a must-read, and the retirement date for Basecamp.</span></div>
+        </div>
+      </div>
+
+      <div class="phase">
+        <div class="node">4</div>
+        <div class="card">
+          <h3>The studio</h3>
+          <p class="goal">Social media content flows from staff phones to the social manager's Drive folder.</p>
+          <h3 class="q">What happens</h3>
+          <ul>
+            <li>A submit screen: pick photos or video, add a note, hit send. Files land directly in a dedicated Shared Drive folder for the social media manager.</li>
+            <li>Uploads run in the background with a progress bar, because chairside wifi and 2-gigabyte videos are both real.</li>
+            <li>This reuses the exact Drive plumbing phase 2 builds, which is why it's cheap and why it comes after.</li>
+          </ul>
+          <div class="chips"><span class="chip planned">Drive plumbing from phase 2</span><span class="chip new">submit flow</span></div>
+        </div>
+      </div>
+
+      <div class="phase">
+        <div class="node">5</div>
+        <div class="card">
+          <h3>The connections</h3>
+          <p class="goal">Deputy stops being just a link.</p>
+          <h3 class="q">What happens</h3>
+          <ul>
+            <li>"My shifts" appears in the app, read straight from Deputy, and Ask Alcan learns to answer schedule questions with real roster context.</li>
+            <li>Research confirmed clock-in and clock-out are possible through Deputy's official interfaces, so that's a genuine later option, taken only if the link version proves annoying.</li>
+            <li>Done Desk, ADP, and Uptime stay links unless usage argues otherwise. Links that work beat modules that lag.</li>
+          </ul>
+          <div class="chips"><span class="chip planned">Ask schedule tool</span><span class="chip new">Deputy read connection</span></div>
+        </div>
+      </div>
+
+      <div class="phase track">
+        <div class="node">⇅</div>
+        <div class="card">
+          <h3>Parallel track: our own ground</h3>
+          <p class="goal">Moving off Lovable onto company-owned hosting. Runs alongside the phases, invisible to staff.</p>
+          <h3 class="q">What happens</h3>
+          <ul>
+            <li>Today the app publishes through Lovable. The existing consolidation plan moves it to infrastructure the company owns and controls: deploys happen when we merge, not when a button is pressed.</li>
+            <li>Rehearse on the low-stakes Summit site first, then move this app, then flip the new domain and finally make the code repository private.</li>
+            <li><b>Timing recommendation:</b> complete the move before phase 3. The feed and push era needs us in full control of releases, and the domain flip should land with the new name.</li>
+          </ul>
+          <div class="chips"><span class="chip planned">hosting consolidation plan</span></div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <section class="block">
+    <h2>How we'll work</h2>
+    <p>Every ticket runs through the existing kit with its two human gates: you
+    approve the spec before anything is built, and you review and merge the
+    finished work. Between those gates the build and QA chain runs without
+    interruptions. On top of that sit the amber checkpoints above: the moments
+    where Tim and Alex see the thing and steer. Each phase ships to a pilot
+    group before it ships to everyone, and each phase ends with a live demo on
+    a phone.</p>
+  </section>
+
+  <section class="block">
+    <h2>Still open</h2>
+    <ul class="open-list">
+      <li><b>The name and domain.</b> Phase 0's headline decision, with Tim.</li>
+      <li><b>Workspace identities.</b> Whether every staff member, including part-timers, gets a Google account. If not, parts of this plan need a rethink.</li>
+      <li><b>Feed build approach.</b> Recommendation is a small build on our own stack; the honest alternative (a feed service's free tier) is in the research memo.</li>
+      <li><b>Exact hosting-move timing.</b> Recommended before phase 3; the rehearsal on Summit will tell us how confident to be.</li>
+    </ul>
+  </section>
+
+  <div class="footer-note">
+    Draft v1 for review. Companion documents in the repo:
+    <code>docs/alcan-app/README.md</code> (the synthesis and principles) and
+    <code>docs/alcan-app/research/proven-platforms.md</code> (the research this
+    plan leans on, with sources). Questions and challenges welcome; that's what
+    this draft is for.
+  </div>
+</div>
