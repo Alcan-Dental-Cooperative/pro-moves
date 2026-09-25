@@ -1,65 +1,66 @@
-# Session state — 2026-09-24 (evening)
+# Session state — 2026-09-25
 
 ## The job
-Fold John's answers into the Alcan App plan (v2) and tee up the design
-mockup work that comes next.
+First round of Alcan App shell mockups: John's five-tab IA turned into
+static concept screens for Tim's checkpoint 2.
 
 ## Done
-- `docs/alcan-app/README.md` bumped to v0.2: Google accounts answered
-  (most staff do NOT get them; app-native sign-in; app is the staff
-  reading surface for Drive docs), Tim & Alex largely approved plan v1,
-  new "use what we already pay for" Google/Gemini ground rule, feed
-  concept art linked.
-- `docs/alcan-app/build-plan.html` v2 republished to the SAME artifact:
-  https://claude.ai/code/artifact/39faf068-5c14-4e4a-9190-485f39c000df
-  (if John shared it, the share pin may still show v1 until moved).
-- Committed and pushed on branch `docs/alcan-app-plan` (updates PR #133).
-- c0 nodes added: "staff google account coverage", "alcan app plan v2
-  status". Memory file alcan-app-initiative.md refreshed.
+- Published Turn 2 shell mockups (five phone screens, one per tab):
+  https://claude.ai/code/artifact/253a19a3-dd87-4898-9e6f-107efcf5f14b
+  Source: scratchpad only, not yet committed to the repo.
+- IA confirmed against docs: five tabs is the hard ceiling
+  (docs/features/mobile-redesign-skeleton.md); John's map supersedes that
+  doc's old Home/Explore/Performance/Comms/Ask end state.
+- Brand call agreed with John: shell wears the Alcan family look, the Pro
+  Moves kit widens into the app ("Peak" placeholder) kit, Pro Moves keeps
+  its P-mark as one tab's brand. PEAK is defined in exactly one CSS rule
+  in the mock file for easy swap.
+- Turn 1 concept-art assets extracted (Biondi Sans OTF, P-mark SVG, page
+  markup) from artifact 5a700903 into the session scratchpad.
+- c0 nodes: "alcan app five tab ia", "peak app brand direction".
 
 ## Next
-- Start design mockups for the app shell / checkpoint 2, per John's ask
-  ("let's start to mock up some stuff"). Approach agreed with John this
-  session: static concept screens per major surface first (cheap,
-  disposable, for Tim), a small clickable shell demo ONLY if navigation
-  feel needs judging, then real build behind a feature flag. No
-  full-app clickable prototype.
-- Use "Peak" as the placeholder app name (John, this session). Name and
-  domain wait; keep the name in one swappable place in any mock.
-- Concrete first step: propose which screens to mock first (suggest:
-  Home, the nav/tab shell, Hub, News/feed following the briefing
-  concept) and produce static concept art in the style of the existing
-  feed exploration.
+- Mock v2 with John's two notes: (1) Ask Alcan screen becomes a standard
+  chat UI like ChatGPT with chat history/options in the usual drawer spot;
+  (2) replace the "Library" browse list with recently-opened docs and
+  maybe pins. Republish to the SAME artifact URL above. John does visual
+  QA (never Chrome-screenshot QA, he prefers doing it himself).
+- Then: start the permissions/identity redesign workstream (see Open
+  questions) and a Turn 3 mock round for desktop admin surfaces once the
+  permission model is sketched.
 
 ## Files that matter
 `docs/alcan-app/README.md` — initiative home, v0.2, decisions live here
 `docs/alcan-app/build-plan.html` — plan of record, v2, published
-`docs/alcan-app/research/proven-platforms.md` — adopt-vs-build evidence
-`docs/features/ask-alcan-assistant.md` — v0.3 Drive decision block
-`promoves-brand/` — locked brand kit; mockups must consume DSN-5 tokens
+`docs/features/mobile-redesign-skeleton.md` — 5-tab ceiling + old IA map
+`docs/simplification-roadmap.md` — split-brain permissions audit input
+`promoves-brand/brand-brief.md` — Alcan/Pro Moves brand architecture
 
 ## Open questions
-- App name/domain parked; "Peak" is the working placeholder (decided).
-- Feed adopt-vs-build still open; briefing concept art is design input.
-- Does the Google Shared Drive exist yet? Phase 0 verifies/creates.
-- PRs #129, #132, #133 await John's merge.
+- Tab names are working labels ("My Role", "The Hub"); Tim's checkpoint 2
+  blesses the map, brand call, and ideally the real app name.
+- Permissions redesign: John wants the rebuild to fix user profiling and
+  the dual permission systems (his biggest recurring pain). Needs its own
+  design doc before per-tab PRDs; feeds checkpoint 3. Not started.
+- Should mock sources be committed to docs/alcan-app/? Offered, not decided.
+- PRs #129, #132, #133 still await John's merge.
 
 ## Do not re-derive
-- Most staff get NO Google accounts (John, 2026-09-24). App-native
-  sign-in; in-app doc reader from nightly-sync copies; Chat sidecar is
-  leadership-only; social uploads via backend service account. c0 node
-  "staff google account coverage".
-- Plan v1 reviewed and largely approved by Tim & Alex; checkpoint 1
-  substantially passed. Only name/domain remains, and it is parked.
-- Feed is DECIDED feed-first (no forum, no chat, no DMs). Concept art
-  (briefing News tab, must-see "Got it", monthly Vitals letter, founder
-  composer): https://claude.ai/artifact/CAitf6tbftxrSiVSTdyzSH — input,
-  not gospel.
-- Ground rule: evaluate Google Workspace/Gemini built-ins anywhere they
-  streamline, not just social submissions.
-- Prototype approach (agreed with John): static mocks → tiny clickable
-  shell demo if needed → real build behind a flag. Never a throwaway
-  full prototype.
-- Mockups are design artifacts, not repo UI code; but any in-app build
-  later consumes DSN-5 tokens and the locked brand kit.
-- c0 namespace for this repo is `skill-flow-pro`; do not "fix" it.
+- The five-tab IA (John, 2026-09-24, mocked not approved): Home (briefing
+  feed opens the app, ritual pinned as a strip), Ask Alcan (chat + docs),
+  Pro Moves (whole loop, center slot, P-mark icon), My Role (Explore
+  renamed + Alcan Way), The Hub (Deputy/Done Desk/ADP/Uptime + photo
+  submission + surveys). Profile/settings stay in the header avatar menu.
+  c0: "alcan app five tab ia".
+- Mocks are directional only; every tab gets PRDs through the normal spec
+  gate. John's Library/recents note is PRD input, not a mock blocker.
+- Turn 1 feed exploration (screens 1a-1h) lives at desktop artifact
+  claude.ai/artifact/CAitf6tbftxrSiVSTdyzSH = code artifact 5a700903, a
+  BUNDLED page (base64 assets); to read it, extract the
+  __bundler/template script, do not WebFetch the shortlink (403).
+- Most staff get NO Google accounts; app-native sign-in; docs read in-app
+  from nightly-sync copies (c0: "staff google account coverage").
+- Sequence agreed: mock v2 + Tim checkpoint (days), permissions design in
+  parallel, then per-tab PRDs in build order (feed first, Pro Moves tab is
+  a relocation, Hub trivial, Ask extends ASK workstream).
+- c0 namespace here is skill-flow-pro; do not "fix" it.
