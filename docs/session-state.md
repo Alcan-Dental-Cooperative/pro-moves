@@ -1,80 +1,66 @@
-# Session state — 2026-09-18 (rev 3, LRM-13 shipped to review)
+# Session state — 2026-09-25
 
 ## The job
-Spec, build, QA, and ship LRM-13 (composer-first blast editor) after PR #123
-(LRM-12) merged this morning.
+First round of Alcan App shell mockups: John's five-tab IA turned into
+static concept screens for Tim's checkpoint 2.
 
 ## Done
-- Spec written and approved (Gate 1, John, 2026-09-18):
-  docs/specs/lrm-13-composer-first.md. All 7 locked decisions plus one
-  addition made during review: a save-state indicator that tracks DIRTY
-  STATE not the network request (muted "Saving…" while typing, one flip to
-  green "Saved" per pause, "Not saved" on failure).
-- Built by kit-builder on feature/lrm-13-composer-first (3 commits), then
-  fresh-eyes QA PASS, then 3 QA fixes applied in a 4th commit (discard
-  cancels the pending autosave timer, discard confirm gets a re-entry
-  guard, blastTemplate.ts rejects nested/duplicated AI delimiters). Final
-  gate green: 1201/1201 tests, clean build.
-- PR #127 open, awaiting John's Gate 2:
-  https://github.com/Alcan-Dental-Cooperative/pro-moves/pull/127
-- Backend pre-deployed to prod per the approved spec's ordering (both
-  backward compatible with the published app): lead_meetings.title column
-  applied and verified; lead-week-blast edge function v11 deployed via
-  Supabase MCP (index.ts + blastTemplate.ts + draftValidation.ts +
-  htmlUtils.ts, verify_jwt true). Until Publish, the only visible prod
-  change is that generated drafts use the new "Hey there!" template.
-- Motion ticket tk_eBvzAvx6ifqPZbewGWoYxh at stage:ready-to-review.
-- Dev server started for John's local testing: npm run dev on the feature
-  branch, http://localhost:8080 (talks to real prod DB + edge fn v11).
+- Published Turn 2 shell mockups (five phone screens, one per tab):
+  https://claude.ai/code/artifact/253a19a3-dd87-4898-9e6f-107efcf5f14b
+  Source: scratchpad only, not yet committed to the repo.
+- IA confirmed against docs: five tabs is the hard ceiling
+  (docs/features/mobile-redesign-skeleton.md); John's map supersedes that
+  doc's old Home/Explore/Performance/Comms/Ask end state.
+- Brand call agreed with John: shell wears the Alcan family look, the Pro
+  Moves kit widens into the app ("Peak" placeholder) kit, Pro Moves keeps
+  its P-mark as one tab's brand. PEAK is defined in exactly one CSS rule
+  in the mock file for easy swap.
+- Turn 1 concept-art assets extracted (Biondi Sans OTF, P-mark SVG, page
+  markup) from artifact 5a700903 into the session scratchpad.
+- c0 nodes: "alcan app five tab ia", "peak app brand direction".
 
 ## Next
-- John is live-testing on localhost:8080 now and ALREADY HAS FEEDBACK AND
-  BUGS he will bring to the next session. First action next session: take
-  his list, reproduce each item against the code, and triage into
-  fix-on-this-branch (pre-merge, commits onto
-  feature/lrm-13-composer-first, PR #127 updates automatically) vs
-  follow-up ticket. Do not merge anything until his items are resolved or
-  explicitly deferred.
-- After his items clear: John walks the PR #127 checklist (merge on
-  GitHub, Lovable back on main, re-sync, Publish). No DB or edge fn steps
-  remain for him.
-- Then /status to sync the Motion board from GitHub state.
+- Mock v2 with John's two notes: (1) Ask Alcan screen becomes a standard
+  chat UI like ChatGPT with chat history/options in the usual drawer spot;
+  (2) replace the "Library" browse list with recently-opened docs and
+  maybe pins. Republish to the SAME artifact URL above. John does visual
+  QA (never Chrome-screenshot QA, he prefers doing it himself).
+- Then: start the permissions/identity redesign workstream (see Open
+  questions) and a Turn 3 mock round for desktop admin surfaces once the
+  permission model is sketched.
 
 ## Files that matter
-`docs/specs/lrm-13-composer-first.md` — approved spec incl. acceptance script and QA manual-test list
-`src/pages/training/MeetingsAndFocusTab.tsx` — composer, summarize modal, autosave wiring, discard
-`src/lib/leadWeekBlastSaveState.ts` — save indicator dirty-state derivation (pure, tested)
-`src/lib/leadMeetingsAndFocus.ts` — formatMeetingLabel ("Fri 9/14 · title")
-`supabase/functions/lead-week-blast/blastTemplate.ts` — fixed template assembly + delimiter extraction
-`supabase/functions/lead-week-blast/index.ts` — new draft/polish prompts (deployed as v11)
-`src/hooks/useLeadWeekBlasts.tsx` — createBlast/generateDraft/updateBlastBody/deleteDraft
-`supabase/migrations/20260918093000_lrm13_meeting_title.sql` — applied to prod already, do not re-apply
+`docs/alcan-app/README.md` — initiative home, v0.2, decisions live here
+`docs/alcan-app/build-plan.html` — plan of record, v2, published
+`docs/features/mobile-redesign-skeleton.md` — 5-tab ceiling + old IA map
+`docs/simplification-roadmap.md` — split-brain permissions audit input
+`promoves-brand/brand-brief.md` — Alcan/Pro Moves brand architecture
 
 ## Open questions
-- John's live-test feedback and bug list (he has items already; contents
-  unknown until next session).
-- Mention to Ariyana: meetings now have an optional title field, reversing
-  her 2026-09-14 decline because the picker needs disambiguation.
+- Tab names are working labels ("My Role", "The Hub"); Tim's checkpoint 2
+  blesses the map, brand call, and ideally the real app name.
+- Permissions redesign: John wants the rebuild to fix user profiling and
+  the dual permission systems (his biggest recurring pain). Needs its own
+  design doc before per-tab PRDs; feeds checkpoint 3. Not started.
+- Should mock sources be committed to docs/alcan-app/? Offered, not decided.
+- PRs #129, #132, #133 still await John's merge.
 
 ## Do not re-derive
-- The LRM-13 backend is LIVE in prod (title column + edge fn v11). Do not
-  re-apply the migration or redeploy the function unless code changes.
-- QA hard rules: test send emails only the author; never complete a real
-  Send; masquerade cannot see Ariyana's data (author-scoped RLS).
-- The PR #116 persist-before-send guarantee is intact; QA traced it end to
-  end including the type-then-Send race. needsSaveBeforeSend is the
-  backstop under the new autosave.
-- Kit gates: only two human gates (spec approval, merge). Roll /build into
-  /qa without asking.
-- Old "Regenerate" button was deliberately removed (Summarize + replace
-  confirm covers it); shouldConfirmRegenerate is orphaned-but-tested dead
-  code, left on purpose.
-- The guard hook blocks any Bash command containing both "push" and
-  "main", including innocent ones like `git log main..HEAD` chained after
-  a push. Split such commands.
-- The folder's checked-out branch is shared by every tab/session; it is on
-  feature/lrm-13-composer-first with John's dev server running from it.
-  Use a worktree for any parallel session, and do not switch this folder's
-  branch while he is testing.
-- supabase CLI deploy is permission-blocked in this harness; use the
-  Supabase MCP deploy_edge_function tool (worked fine for v11).
+- The five-tab IA (John, 2026-09-24, mocked not approved): Home (briefing
+  feed opens the app, ritual pinned as a strip), Ask Alcan (chat + docs),
+  Pro Moves (whole loop, center slot, P-mark icon), My Role (Explore
+  renamed + Alcan Way), The Hub (Deputy/Done Desk/ADP/Uptime + photo
+  submission + surveys). Profile/settings stay in the header avatar menu.
+  c0: "alcan app five tab ia".
+- Mocks are directional only; every tab gets PRDs through the normal spec
+  gate. John's Library/recents note is PRD input, not a mock blocker.
+- Turn 1 feed exploration (screens 1a-1h) lives at desktop artifact
+  claude.ai/artifact/CAitf6tbftxrSiVSTdyzSH = code artifact 5a700903, a
+  BUNDLED page (base64 assets); to read it, extract the
+  __bundler/template script, do not WebFetch the shortlink (403).
+- Most staff get NO Google accounts; app-native sign-in; docs read in-app
+  from nightly-sync copies (c0: "staff google account coverage").
+- Sequence agreed: mock v2 + Tim checkpoint (days), permissions design in
+  parallel, then per-tab PRDs in build order (feed first, Pro Moves tab is
+  a relocation, Hub trivial, Ask extends ASK workstream).
+- c0 namespace here is skill-flow-pro; do not "fix" it.
