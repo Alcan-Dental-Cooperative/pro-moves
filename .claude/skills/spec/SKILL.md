@@ -44,7 +44,7 @@ before building.
 
 ## Rules
 
-- Runs on the session model (Fable 5, set in `.claude/settings.json`). Do not
+- Runs on the session model (Opus 5.5, set in `.claude/settings.json`). Do not
   delegate the spec itself to a subagent. If the spec needs research first,
   delegate that to `kit-reviewer` (Opus 4.8) or `kit-scout` (Haiku) and write the
   spec yourself.
