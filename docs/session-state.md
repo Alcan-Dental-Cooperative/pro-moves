@@ -1,72 +1,65 @@
-# Session state — 2026-09-24
+# Session state — 2026-09-24 (evening)
 
 ## The job
-Stand up the Alcan App initiative: synthesize Tim's unified-app direction
-against all prior planning, produce the folder, the research, and the
-phased build plan v1 for John's review.
+Fold John's answers into the Alcan App plan (v2) and tee up the design
+mockup work that comes next.
 
 ## Done
-- `docs/alcan-app/README.md` — initiative synthesis: six locked
-  principles, capability map, governance (Tim/Alex checkpoints), open
-  decisions. Feed-first comms decided: no forum, no chat, no DMs in-app.
-- `docs/alcan-app/research/proven-platforms.md` — two web-research
-  passes with sources (employee-app IA, comms model, Drive uploads,
-  Deputy API, PWA reaffirmation).
-- `docs/alcan-app/build-plan.html` — visual phased plan v1, published as
-  artifact: https://claude.ai/code/artifact/39faf068-5c14-4e4a-9190-485f39c000df
-- All on branch `docs/alcan-app-plan`, PR #133 (open).
-- Earlier same session: Ask doc bumped to v0.3 with the Google Drive
-  Shared Drive decision (PR #132, open); branch sweep deleted 26 merged
-  local branches; fixed `.c0/config.toml` namespace (was pointing at
-  empty `pro-moves`, facts live under `skill-flow-pro`).
+- `docs/alcan-app/README.md` bumped to v0.2: Google accounts answered
+  (most staff do NOT get them; app-native sign-in; app is the staff
+  reading surface for Drive docs), Tim & Alex largely approved plan v1,
+  new "use what we already pay for" Google/Gemini ground rule, feed
+  concept art linked.
+- `docs/alcan-app/build-plan.html` v2 republished to the SAME artifact:
+  https://claude.ai/code/artifact/39faf068-5c14-4e4a-9190-485f39c000df
+  (if John shared it, the share pin may still show v1 until moved).
+- Committed and pushed on branch `docs/alcan-app-plan` (updates PR #133).
+- c0 nodes added: "staff google account coverage", "alcan app plan v2
+  status". Memory file alcan-app-initiative.md refreshed.
 
 ## Next
-- DONE 2026-09-24 (second session): John answered the open questions;
-  README bumped to v0.2 and build-plan.html v2 republished to the same
-  artifact URL. Answers folded in: most staff do NOT get Google
-  accounts (plan reworked so nothing staff-facing needs one; app is
-  the in-app reading surface for Drive docs); Tim & Alex reviewed and
-  largely approved plan v1 (checkpoint 1 substantially passed, name/
-  domain still open); Shared Drive existence unconfirmed (phase 0
-  verifies/creates); new ground rule: consider Gemini/Google Workspace
-  tools anywhere they streamline. Feed concept art noted (briefing-
-  style News tab + Vitals): https://claude.ai/artifact/CAitf6tbftxrSiVSTdyzSH
-- Next: John merges PRs #129, #132, #133; land the name/domain with
-  Tim; then spec Phase 0 items via /spec.
+- Start design mockups for the app shell / checkpoint 2, per John's ask
+  ("let's start to mock up some stuff"). Approach agreed with John this
+  session: static concept screens per major surface first (cheap,
+  disposable, for Tim), a small clickable shell demo ONLY if navigation
+  feel needs judging, then real build behind a feature flag. No
+  full-app clickable prototype.
+- Use "Peak" as the placeholder app name (John, this session). Name and
+  domain wait; keep the name in one swappable place in any mock.
+- Concrete first step: propose which screens to mock first (suggest:
+  Home, the nav/tab shell, Hub, News/feed following the briefing
+  concept) and produce static concept art in the style of the existing
+  feed exploration.
 
 ## Files that matter
-`docs/alcan-app/README.md` — initiative home; decisions live here
-`docs/alcan-app/build-plan.html` — plan of record for sequencing
-`docs/alcan-app/research/proven-platforms.md` — evidence behind
-proven-over-scratch calls
-`docs/features/ask-alcan-assistant.md` — v0.3, Drive decision block
-`.c0/config.toml` — namespace must stay `skill-flow-pro` (see comment)
+`docs/alcan-app/README.md` — initiative home, v0.2, decisions live here
+`docs/alcan-app/build-plan.html` — plan of record, v2, published
+`docs/alcan-app/research/proven-platforms.md` — adopt-vs-build evidence
+`docs/features/ask-alcan-assistant.md` — v0.3 Drive decision block
+`promoves-brand/` — locked brand kit; mockups must consume DSN-5 tokens
 
 ## Open questions
-- App name and domain (Tim, checkpoint 1).
-- ~~Google Workspace identity~~ ANSWERED 2026-09-24: most staff do not
-  get Google accounts; plan reworked accordingly (see README v0.2).
-- Feed build approach: recommended small build on our stack; alternative
-  (GetStream free tier) documented in research memo. Concept art exists
-  (briefing direction), input to design checkpoint.
-- Hosting-move timing: recommended complete before Phase 3.
-- Does the Google Shared Drive exist yet? Unconfirmed; phase 0 item.
-- Three open PRs await John's merge: #129, #132, #133.
-- Six stale unmerged local branches need keep-or-kill (list in c0 node
-  "stale unmerged local branches"); nothing blocks on them.
+- App name/domain parked; "Peak" is the working placeholder (decided).
+- Feed adopt-vs-build still open; briefing concept art is design input.
+- Does the Google Shared Drive exist yet? Phase 0 verifies/creates.
+- PRs #129, #132, #133 await John's merge.
 
 ## Do not re-derive
-- Comms layer is DECIDED feed-first: no forum, no chat, no DMs in the
-  app; Google Chat Spaces via links hub is the chat sidecar. Evidence in
-  research memo; do not reopen.
-- Primary documents home is DECIDED: Google Drive Shared Drive replacing
-  Basecamp (Ask doc v0.3). Basecamp exit = docs to Drive + comms to feed,
-  retired once.
-- Multi-tenant posture is DECIDED: platform stays org-aware, Alcan App
-  is the branded shell, never a fork.
-- PWA + full desktop peer is DECIDED; nothing on the feature list needs
-  an app store.
-- Deputy API: clock in/out IS possible via API (verified, sources in
-  memo); Deputy starts as a link anyway.
-- c0 graph namespace for this repo is `skill-flow-pro` (98 concepts);
-  config.toml already points there. Do not "fix" it to `pro-moves`.
+- Most staff get NO Google accounts (John, 2026-09-24). App-native
+  sign-in; in-app doc reader from nightly-sync copies; Chat sidecar is
+  leadership-only; social uploads via backend service account. c0 node
+  "staff google account coverage".
+- Plan v1 reviewed and largely approved by Tim & Alex; checkpoint 1
+  substantially passed. Only name/domain remains, and it is parked.
+- Feed is DECIDED feed-first (no forum, no chat, no DMs). Concept art
+  (briefing News tab, must-see "Got it", monthly Vitals letter, founder
+  composer): https://claude.ai/artifact/CAitf6tbftxrSiVSTdyzSH — input,
+  not gospel.
+- Ground rule: evaluate Google Workspace/Gemini built-ins anywhere they
+  streamline, not just social submissions.
+- Prototype approach (agreed with John): static mocks → tiny clickable
+  shell demo if needed → real build behind a flag. Never a throwaway
+  full prototype.
+- Mockups are design artifacts, not repo UI code; but any in-app build
+  later consumes DSN-5 tokens and the locked brand kit.
+- c0 namespace for this repo is `skill-flow-pro`; do not "fix" it.
