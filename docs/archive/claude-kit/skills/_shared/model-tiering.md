@@ -1,6 +1,6 @@
 # Model tiering for the kit
 
-The orchestrator (the session you type into) runs **Fable 5**, set via `"model"`
+The orchestrator (the session you type into) runs **Opus 5.5**, set via `"model"`
 in `.claude/settings.json`. Subagents are pinned by agent definition, because the
 Agent tool's `model` parameter only accepts tier aliases (`opus`, `sonnet`,
 `haiku`, `fable`) and `opus` resolves to Opus 5, which is not what this project
