@@ -6,7 +6,7 @@
 // Data layer (useAskAlcanChat.ts) and the ask-alcan response contract are
 // unchanged by this ticket — this is a presentation rebuild only.
 
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import {
   Lock,
@@ -14,12 +14,16 @@ import {
   MessagesSquare,
   Plus,
   ExternalLink,
+  ThumbsDown,
+  ThumbsUp,
   Trash2,
   Menu,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Textarea } from '@/components/ui/textarea';
+import { cn } from '@/lib/utils';
 import {
   Sheet,
   SheetContent,
@@ -56,8 +60,20 @@ import {
   useAskMessages,
   useAskMutations,
   useCitedDocuments,
+  useOwnStaffId,
 } from '@/hooks/useAskAlcanChat';
-import type { AskConversationRow, AskMessageRow } from '@/integrations/supabase/corpusTypes';
+import {
+  nextFeedbackState,
+  useAskFeedbackMutations,
+  useAskMessageFeedbackMap,
+  type FeedbackState,
+} from '@/hooks/useAskFeedback';
+import type {
+  AskConversationRow,
+  AskFeedbackRating,
+  AskMessageFeedbackRow,
+  AskMessageRow,
+} from '@/integrations/supabase/corpusTypes';
 import {
   computeShowPending,
   useIsTouchDevice,
@@ -127,12 +143,155 @@ function CitationChips({
   );
 }
 
+/**
+ * Thumbs up/down + optional note on an assistant answer, and the consent
+ * line explaining what a rating does. Tapping the already-chosen rating
+ * clears it; tapping the other one switches; the note box only shows after
+ * thumbs down (though a note saved there survives a switch to thumbs up —
+ * see nextFeedbackState).
+ */
+function AnswerFeedback({
+  messageId,
+  staffId,
+  feedback,
+}: {
+  messageId: string;
+  staffId: string | null;
+  feedback: AskMessageFeedbackRow | undefined;
+}) {
+  const { toast } = useToast();
+  const { setRating, clearRating, saveNote } = useAskFeedbackMutations();
+  const savedNote = feedback?.note ?? '';
+  const [noteDraft, setNoteDraft] = useState(savedNote);
+  const [noteJustSaved, setNoteJustSaved] = useState(false);
+
+  // Pick up a note that arrived or changed from elsewhere (another tab, a
+  // refetch after switching ratings) without clobbering an in-progress edit
+  // the person hasn't saved yet.
+  useEffect(() => {
+    setNoteDraft(savedNote);
+  }, [savedNote]);
+
+  const current: FeedbackState | null = feedback
+    ? { rating: feedback.rating, note: feedback.note }
+    : null;
+  const busy = setRating.isPending || clearRating.isPending;
+
+  const tap = async (tapped: AskFeedbackRating) => {
+    if (!staffId || busy) return;
+    const next = nextFeedbackState(current, tapped);
+    try {
+      if (next === null) {
+        await clearRating.mutateAsync(messageId);
+      } else {
+        await setRating.mutateAsync({ messageId, staffId, rating: next.rating, note: next.note });
+      }
+    } catch (err) {
+      toast({
+        title: 'That rating didn’t save',
+        description: err instanceof Error ? err.message : 'Please try again.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const noteChanged = noteDraft.trim() !== savedNote;
+
+  return (
+    <div className="mt-2 flex flex-col gap-1.5">
+      <div className="flex items-center gap-1">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          disabled={busy || !staffId}
+          onClick={() => void tap(1)}
+          aria-pressed={current?.rating === 1}
+          aria-label="This answer was helpful"
+          title="This answer was helpful"
+          className={cn(
+            'h-9 w-9',
+            current?.rating === 1
+              ? 'bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary'
+              : 'text-muted-foreground'
+          )}
+        >
+          <ThumbsUp className="h-5 w-5" />
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          disabled={busy || !staffId}
+          onClick={() => void tap(-1)}
+          aria-pressed={current?.rating === -1}
+          aria-label="This answer missed"
+          title="This answer missed"
+          className={cn(
+            'h-9 w-9',
+            current?.rating === -1
+              ? 'bg-destructive/10 text-destructive hover:bg-destructive/15 hover:text-destructive'
+              : 'text-muted-foreground'
+          )}
+        >
+          <ThumbsDown className="h-5 w-5" />
+        </Button>
+      </div>
+      <p className="text-2xs text-muted-foreground">
+        Rating shares this question and answer with the Ask Alcan team.
+      </p>
+      {current?.rating === -1 && (
+        <div className="flex flex-col items-start gap-1.5 sm:flex-row sm:items-end">
+          <Textarea
+            value={noteDraft}
+            onChange={(e) => {
+              setNoteDraft(e.target.value);
+              setNoteJustSaved(false);
+            }}
+            placeholder="What was off? (optional)"
+            maxLength={500}
+            aria-label="What was off about this answer"
+            className="min-h-16 w-full max-w-sm text-sm sm:max-w-xs"
+          />
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={saveNote.isPending || !noteChanged}
+            onClick={async () => {
+              try {
+                await saveNote.mutateAsync({ messageId, note: noteDraft.trim() || null });
+                setNoteJustSaved(true);
+              } catch (err) {
+                toast({
+                  title: 'That note didn’t save',
+                  description: err instanceof Error ? err.message : 'Please try again.',
+                  variant: 'destructive',
+                });
+              }
+            }}
+          >
+            Save
+          </Button>
+        </div>
+      )}
+      {noteJustSaved && !noteChanged && (
+        <span className="text-2xs text-muted-foreground">Saved.</span>
+      )}
+    </div>
+  );
+}
+
 function ChatMessage({
   message,
   docs,
+  staffId,
+  feedback,
 }: {
-  message: Pick<AskMessageRow, 'role' | 'content' | 'cited_document_ids'>;
+  message: Pick<AskMessageRow, 'id' | 'role' | 'content' | 'cited_document_ids'>;
   docs: CitedDocsMap | undefined;
+  staffId?: string | null;
+  feedback?: AskMessageFeedbackRow;
 }) {
   const isUser = message.role === 'user';
   return (
@@ -144,6 +303,9 @@ function ChatMessage({
           <MessageResponse>{message.content}</MessageResponse>
         )}
         {!isUser && <CitationChips documentIds={message.cited_document_ids} docs={docs} />}
+        {!isUser && (
+          <AnswerFeedback messageId={message.id} staffId={staffId ?? null} feedback={feedback} />
+        )}
       </MessageContent>
     </Message>
   );
@@ -287,6 +449,7 @@ export default function AskPage() {
     refetch: refetchMessages,
   } = useAskMessages(activeId);
   const { createConversation, ask, deleteConversation } = useAskMutations();
+  const { data: staffId } = useOwnStaffId();
 
   const citedIds = useMemo(() => {
     const ids = new Set<string>();
@@ -294,6 +457,12 @@ export default function AskPage() {
     return [...ids];
   }, [messages]);
   const { data: citedDocs } = useCitedDocuments(citedIds);
+
+  const assistantMessageIds = useMemo(
+    () => (messages ?? []).filter((m) => m.role === 'assistant').map((m) => m.id),
+    [messages]
+  );
+  const { data: feedbackMap } = useAskMessageFeedbackMap(assistantMessageIds);
 
   // The pending bubble is keyed to the conversation it was sent in, and stays
   // up until the refetched rows for that exchange are on screen (see
@@ -430,7 +599,8 @@ export default function AskPage() {
             </p>
             <p className="mt-1 flex items-center gap-1 text-2xs text-muted-foreground">
               <Lock className="h-3 w-3 shrink-0" aria-hidden="true" />
-              Your conversations are private to you. No one else can read them — not even admins.
+              Your conversations are private to you. If you rate an answer, that one question and
+              answer is shared with the Ask Alcan team.
             </p>
           </div>
         </div>
@@ -456,12 +626,23 @@ export default function AskPage() {
               </div>
             )}
             {(messages ?? []).map((m) => (
-              <ChatMessage key={m.id} message={m} docs={citedDocs} />
+              <ChatMessage
+                key={m.id}
+                message={m}
+                docs={citedDocs}
+                staffId={staffId}
+                feedback={feedbackMap?.get(m.id)}
+              />
             ))}
             {showPending && (
               <>
                 <ChatMessage
-                  message={{ role: 'user', content: pending!.question, cited_document_ids: [] }}
+                  message={{
+                    id: 'pending',
+                    role: 'user',
+                    content: pending!.question,
+                    cited_document_ids: [],
+                  }}
                   docs={citedDocs}
                 />
                 <ThinkingBubble />

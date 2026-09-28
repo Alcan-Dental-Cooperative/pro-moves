@@ -74,3 +74,35 @@ export interface AskAlcanResponse {
   answer: string;
   citations: AskCitation[];
 }
+
+// ─── Ask answer feedback (thumbs up/down + optional note) ────────────────────
+// See docs/specs/ask-answer-feedback.md and
+// supabase/migrations/20260928140000_ask_answer_feedback.sql.
+
+export type AskFeedbackRating = 1 | -1;
+
+/** A row of public.ask_message_feedback. Owner-only under RLS. */
+export interface AskMessageFeedbackRow {
+  id: string;
+  message_id: string;
+  staff_id: string;
+  rating: AskFeedbackRating;
+  note: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * One row of the super-admin-only list_ask_answer_feedback() RPC result.
+ * Deliberately has no staff/asker identity column — the admin list never
+ * shows who asked.
+ */
+export interface AskAnswerFeedbackListRow {
+  feedback_id: string;
+  rating: AskFeedbackRating;
+  note: string | null;
+  created_at: string;
+  answer: string;
+  cited_document_ids: string[];
+  question: string | null;
+}

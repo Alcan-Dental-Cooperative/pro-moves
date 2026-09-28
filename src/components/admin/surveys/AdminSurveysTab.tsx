@@ -7,6 +7,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { useSurveyList } from '@/hooks/useSurveys';
 import { deriveSurveyState, surveyStateBadgeClass } from '@/lib/surveyStatus';
 import { cn } from '@/lib/utils';
+import { AnswerFeedbackSection } from '@/components/admin/ask/AnswerFeedbackSection';
 
 export function AdminSurveysTab() {
   const navigate = useNavigate();
@@ -92,6 +93,8 @@ export function AdminSurveysTab() {
           })}
         </div>
       )}
+
+      <AnswerFeedbackSection />
     </div>
   );
 }
