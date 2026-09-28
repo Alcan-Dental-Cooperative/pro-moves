@@ -23,7 +23,7 @@
   },
   "ship": {
     "profile": "lovable-push-main",
-    "extraSteps": null
+    "extraSteps": ".engine/ship.md"
   },
   "preview": {
     "kind": "none",
