@@ -159,6 +159,7 @@ function AnswerFeedback({
   staffId: string | null;
   feedback: AskMessageFeedbackRow | undefined;
 }) {
+  const { toast } = useToast();
   const { setRating, clearRating, saveNote } = useAskFeedbackMutations();
   const savedNote = feedback?.note ?? '';
   const [noteDraft, setNoteDraft] = useState(savedNote);
@@ -176,13 +177,21 @@ function AnswerFeedback({
     : null;
   const busy = setRating.isPending || clearRating.isPending;
 
-  const tap = (tapped: AskFeedbackRating) => {
+  const tap = async (tapped: AskFeedbackRating) => {
     if (!staffId || busy) return;
     const next = nextFeedbackState(current, tapped);
-    if (next === null) {
-      clearRating.mutate(messageId);
-    } else {
-      setRating.mutate({ messageId, staffId, rating: next.rating, note: next.note });
+    try {
+      if (next === null) {
+        await clearRating.mutateAsync(messageId);
+      } else {
+        await setRating.mutateAsync({ messageId, staffId, rating: next.rating, note: next.note });
+      }
+    } catch (err) {
+      toast({
+        title: 'That rating didn’t save',
+        description: err instanceof Error ? err.message : 'Please try again.',
+        variant: 'destructive',
+      });
     }
   };
 
@@ -196,7 +205,7 @@ function AnswerFeedback({
           variant="ghost"
           size="icon"
           disabled={busy || !staffId}
-          onClick={() => tap(1)}
+          onClick={() => void tap(1)}
           aria-pressed={current?.rating === 1}
           aria-label="This answer was helpful"
           title="This answer was helpful"
@@ -214,7 +223,7 @@ function AnswerFeedback({
           variant="ghost"
           size="icon"
           disabled={busy || !staffId}
-          onClick={() => tap(-1)}
+          onClick={() => void tap(-1)}
           aria-pressed={current?.rating === -1}
           aria-label="This answer missed"
           title="This answer missed"
@@ -250,8 +259,16 @@ function AnswerFeedback({
             size="sm"
             disabled={saveNote.isPending || !noteChanged}
             onClick={async () => {
-              await saveNote.mutateAsync({ messageId, note: noteDraft.trim() || null });
-              setNoteJustSaved(true);
+              try {
+                await saveNote.mutateAsync({ messageId, note: noteDraft.trim() || null });
+                setNoteJustSaved(true);
+              } catch (err) {
+                toast({
+                  title: 'That note didn’t save',
+                  description: err instanceof Error ? err.message : 'Please try again.',
+                  variant: 'destructive',
+                });
+              }
             }}
           >
             Save
@@ -582,7 +599,8 @@ export default function AskPage() {
             </p>
             <p className="mt-1 flex items-center gap-1 text-2xs text-muted-foreground">
               <Lock className="h-3 w-3 shrink-0" aria-hidden="true" />
-              Your conversations are private to you. No one else can read them — not even admins.
+              Your conversations are private to you. If you rate an answer, that one question and
+              answer is shared with the Ask Alcan team.
             </p>
           </div>
         </div>

@@ -9,6 +9,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { FunctionsHttpError } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { ADMIN_FEEDBACK_QUERY_KEY } from '@/hooks/useAskFeedback';
 import type {
   AskConversationRow,
   AskMessageRow,
@@ -159,6 +160,12 @@ export function useAskMutations() {
     onSuccess: (_data, conversationId) => {
       queryClient.removeQueries({ queryKey: ['ask', 'messages', conversationId] });
       queryClient.invalidateQueries({ queryKey: ['ask', 'conversations'] });
+      // The conversation's messages cascade to ask_message_feedback in the
+      // database (see supabase/migrations/20260928140000_ask_answer_feedback.sql),
+      // so any rated exchange in it is gone too — the admin list has to be
+      // told, or it keeps showing the deleted exchange until its cache
+      // expires or the page reloads (QA fix, acceptance step 10).
+      queryClient.invalidateQueries({ queryKey: ADMIN_FEEDBACK_QUERY_KEY });
     },
   });
 

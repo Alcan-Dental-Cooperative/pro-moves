@@ -135,14 +135,34 @@ begin
     am.content as answer,
     am.cited_document_ids,
     (
-      -- The question: the latest 'user' message in the same conversation
-      -- that came before the answer.
+      -- The question: the 'user' message in the same conversation this
+      -- answer replied to.
+      --
+      -- QA fix (2026-09-28): both edge functions' persistExchange() insert
+      -- the user and assistant rows of one exchange in a single bulk
+      -- INSERT (ask-alcan/index.ts, ask-alcan-v2/index.ts), and `now()` is
+      -- fixed for the whole statement/transaction, so the two rows always
+      -- share one created_at. A strict `<` never matched the paired
+      -- question — it returned the PREVIOUS exchange's question (or null
+      -- on a conversation's first exchange), which also leaked an unrated
+      -- question into the admin list. `<=` fixes this: the paired question
+      -- shares the answer's timestamp, so it is included and, being the
+      -- latest such row, wins the `order by ... desc limit 1`.
+      --
+      -- The `uq.id desc` tie-break only makes the result deterministic if
+      -- two DIFFERENT exchanges ever land on the exact same timestamp
+      -- (sub-millisecond back-to-back sends); it does not guarantee
+      -- correctness in that case, but with each exchange requiring a full
+      -- model round trip, two exchanges racing to the same timestamp in
+      -- the same conversation is not realistic. Out of scope for this
+      -- ticket: adding an ordering column to ask_messages, which would
+      -- make this exact and is not additive to that table.
       select uq.content
       from public.ask_messages uq
       where uq.conversation_id = am.conversation_id
         and uq.role = 'user'
-        and uq.created_at < am.created_at
-      order by uq.created_at desc
+        and uq.created_at <= am.created_at
+      order by uq.created_at desc, uq.id desc
       limit 1
     ) as question
   from public.ask_message_feedback f
@@ -200,13 +220,32 @@ $$;
 --
 -- No local DB exists for this repo (see CLAUDE.md), so this is a checklist
 -- for QA / John to run against the live project after pasting the migration
--- into the SQL Editor, before signing off on step 1. Use two real accounts:
--- staff A owns a conversation with at least one assistant message; staff B
--- is any other staff member; superadmin is a super-admin account.
+-- into the SQL Editor, before signing off on step 1.
+--
+-- Rewritten after QA (2026-09-28): the first version claimed a super admin
+-- reading ask_message_feedback directly sees 0 rows, which is wrong (they
+-- see their OWN ratings, same as anyone — the table has no super-admin
+-- policy, but the owner policy still applies to a super admin's own rows).
+-- It also asked for two accounts "neither a super admin," but both edge
+-- functions reject non-super-admins outright (Ask Alcan is super-admin-only
+-- today), so no such account can own a conversation to test against. Use
+-- TWO SUPER ADMIN accounts throughout, A and B, exactly as the spec's
+-- acceptance script does. Test writes are wrapped in begin/rollback so
+-- nothing here leaves rows in production; `set local` only takes effect
+-- inside a transaction, which begin/rollback provides.
+--
+-- Before starting: through the app, have super admin A ask at least two
+-- questions in one conversation (so there's an assistant message with a
+-- prior exchange in the same chat to test the question-pairing fix
+-- against), and have super admin B ask one question in a separate, brand
+-- new conversation (for the "first answer in a new chat" check below).
+-- Note each message's id (`select id, role, content, created_at from
+-- ask_messages where conversation_id = '<id>' order by created_at`).
 --
 -- 1. Asker can rate only their own assistant messages.
---    As staff A (via the app, or `set local role authenticated; set local
---    request.jwt.claims...` in the SQL editor scoped to A's session):
+--    begin;
+--    set local role authenticated;
+--    set local request.jwt.claims = '{"sub": "<A''s auth.users id>"}';
 --      insert into ask_message_feedback (message_id, staff_id, rating)
 --      values ('<A''s assistant message id>', '<A''s staff id>', 1);
 --    Expect: 1 row inserted.
@@ -217,9 +256,18 @@ $$;
 --      values ('<A''s user message id>', '<A''s staff id>', 1);
 --    Expect: rejected (RLS with-check fails: the exists() requires
 --    m.role = 'assistant').
+--    rollback;
 --
--- 2. Other users cannot read or write the row.
---    As staff B:
+-- 2. Other users cannot read or write the row (still no committed rows —
+--    do this inside its own begin/rollback, inserting A's row again first
+--    since step 1 rolled its insert back):
+--    begin;
+--    set local role authenticated;
+--    set local request.jwt.claims = '{"sub": "<A''s auth.users id>"}';
+--      insert into ask_message_feedback (message_id, staff_id, rating)
+--      values ('<A''s assistant message id>', '<A''s staff id>', 1)
+--      returning id; -- note this id as <feedback id>
+--    set local request.jwt.claims = '{"sub": "<B''s auth.users id>"}';
 --      select * from ask_message_feedback where message_id = '<A''s
 --      assistant message id>';
 --    Expect: 0 rows (RLS using-clause fails: staff_id / conversation
@@ -232,16 +280,18 @@ $$;
 --    equal the caller, which is B, but the conversation belongs to A).
 --
 --    Still as B, try to update or delete A's row directly by id:
---      update ask_message_feedback set rating = -1 where id = '<A''s
---      feedback id>';
+--      update ask_message_feedback set rating = -1 where id = '<feedback id>';
 --    Expect: 0 rows affected.
+--    rollback;
 --
 -- 3. A non-super-admin calling the function gets an error.
---    As staff A or B (neither is a super admin):
---      select * from list_ask_answer_feedback();
---    Expect: error "Not authorized".
+--    Ask Alcan is super-admin-only today, so there is no ordinary staff
+--    account to test this against live. Confirm instead by reading
+--    is_superadmin() (called first, before any query) and, if there is a
+--    staging/off-org account available, calling list_ask_answer_feedback()
+--    as it and expecting "Not authorized".
 --
---    As a super admin:
+--    As a super admin (A or B; no transaction needed, these are reads):
 --      select * from list_ask_answer_feedback();
 --    Expect: rows back, newest first, no staff_id / asker identity column
 --    in the result at all.
@@ -252,6 +302,17 @@ $$;
 --
 --    As a super admin, confirm the direct-table door stays shut:
 --      select * from ask_message_feedback;
---    Expect: 0 rows (no super-admin policy exists on the table itself;
---    is_superadmin() is checked only inside the function, never in a
---    table policy).
+--    Expect: only rows where staff_id is the caller's own — never another
+--    super admin's row (no super-admin policy exists on the table itself;
+--    is_superadmin() is checked only inside the function, never in a table
+--    policy, so this is the owner policy applying to a super admin same as
+--    anyone else).
+--
+-- 4. Question pairing (the QA fix above).
+--    As super admin A, in the app: rate the LATER of A's two answers in the
+--    multi-exchange conversation thumbs up or down. In the admin list
+--    (Admin > Ask Alcan > Answer feedback), confirm the question shown is
+--    that answer's own question, not the first exchange's question.
+--    As super admin B, rate B's answer in the brand-new single-exchange
+--    conversation. Confirm the admin list shows that exact question, not
+--    a blank/null question (this is the case a strict `<` always failed).

@@ -20,7 +20,10 @@ import type {
 const sb = supabase as any;
 
 const FEEDBACK_QUERY_KEY = ['ask', 'feedback'] as const;
-const ADMIN_FEEDBACK_QUERY_KEY = ['ask', 'admin-feedback'] as const;
+// Exported so useAskAlcanChat.ts's deleteConversation can invalidate the
+// admin list too (QA fix: deleting a conversation left its rated exchange
+// on the admin list until the 5-minute cache expired or the page reloaded).
+export const ADMIN_FEEDBACK_QUERY_KEY = ['ask', 'admin-feedback'] as const;
 
 /** One feedback row per message id, batched like useCitedDocuments. */
 export function useAskMessageFeedbackMap(messageIds: string[]) {
@@ -54,9 +57,12 @@ export interface FeedbackState {
  * - tapping the already-selected rating clears it entirely (the row goes
  *   away, note and all — clearing a rating removes the exchange from the
  *   admin list, per the spec's consent rule)
- * - tapping the OTHER rating switches to it, carrying over any note already
- *   saved (only the UI's note box is down-only; the data itself doesn't
- *   care which rating a note is attached to)
+ * - tapping the OTHER rating switches to it. Switching to thumbs UP always
+ *   drops any note (John's decision, 2026-09-28): a helpful rating never
+ *   carries a "what was off" note, and the note box only ever shows on
+ *   down, so there'd be no way to see or clear it once it was there.
+ *   Switching to thumbs DOWN keeps a note if one is already saved (thumbs
+ *   up never has one to keep, by the rule above).
  * - tapping with nothing set yet, sets that rating with no note
  *
  * No I/O here on purpose, so set/switch/clear can be tested without a
@@ -67,12 +73,21 @@ export function nextFeedbackState(
   tapped: AskFeedbackRating
 ): FeedbackState | null {
   if (current?.rating === tapped) return null;
+  if (tapped === 1) return { rating: 1, note: null };
   return { rating: tapped, note: current?.note ?? null };
 }
 
 export function useAskFeedbackMutations() {
   const queryClient = useQueryClient();
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: FEEDBACK_QUERY_KEY });
+  // Both the chat-side per-message map and the admin list read from this
+  // table, so a rating change has to invalidate both (QA fix: the admin
+  // list wasn't invalidated at all, so it kept showing a cleared rating or
+  // a stale note until its 5-minute cache expired or the page reloaded).
+  const invalidate = () =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: FEEDBACK_QUERY_KEY }),
+      queryClient.invalidateQueries({ queryKey: ADMIN_FEEDBACK_QUERY_KEY }),
+    ]);
 
   /** Sets or switches the rating for a message (one row per message_id). */
   const setRating = useMutation({

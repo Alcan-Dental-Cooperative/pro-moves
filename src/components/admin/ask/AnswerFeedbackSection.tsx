@@ -91,15 +91,23 @@ function FeedbackRowCard({ row }: { row: AskAnswerFeedbackListRow }) {
 
 export function AnswerFeedbackSection() {
   const { canAccess } = useAskAlcanAccess();
-  const { data: rows, isLoading } = useAskAnswerFeedbackList(canAccess);
+  const {
+    data: rows,
+    isLoading,
+    isError,
+    refetch,
+  } = useAskAnswerFeedbackList(canAccess);
   const [filter, setFilter] = useState<AnswerFeedbackFilter>('all');
 
   const filtered = useMemo(() => filterAnswerFeedback(rows ?? [], filter), [rows, filter]);
 
   if (!canAccess) return null;
-  // Omit the section entirely when there's no feedback at all, rather than
-  // showing an empty-state message.
-  if (!isLoading && (rows?.length ?? 0) === 0) return null;
+  // Omit the section entirely when there's truly no feedback, rather than
+  // showing an empty-state message — but a load FAILURE still gets a visible
+  // error (below), so a broken fetch never looks the same as "nothing rated
+  // yet" (QA fix: this used to hide on any query error, including the
+  // frontend shipping before the migration's SQL was applied).
+  if (!isLoading && !isError && (rows?.length ?? 0) === 0) return null;
 
   return (
     <div className="space-y-3 border-t pt-4">
@@ -108,26 +116,35 @@ export function AnswerFeedbackSection() {
           <MessageSquareText className="h-6 w-6" />
           Answer feedback
         </h2>
-        <ToggleGroup
-          type="single"
-          value={filter}
-          onValueChange={(v) => v && setFilter(v as AnswerFeedbackFilter)}
-          size="sm"
-          className="rounded-lg bg-muted/50 p-1"
-        >
-          <ToggleGroupItem value="all" className="h-7 rounded-md px-2 text-xs">
-            All
-          </ToggleGroupItem>
-          <ToggleGroupItem value="down" className="h-7 rounded-md px-2 text-xs">
-            Down
-          </ToggleGroupItem>
-          <ToggleGroupItem value="up" className="h-7 rounded-md px-2 text-xs">
-            Up
-          </ToggleGroupItem>
-        </ToggleGroup>
+        {!isError && (
+          <ToggleGroup
+            type="single"
+            value={filter}
+            onValueChange={(v) => v && setFilter(v as AnswerFeedbackFilter)}
+            size="sm"
+            className="rounded-lg bg-muted/50 p-1"
+          >
+            <ToggleGroupItem value="all" className="h-10 rounded-md px-3 text-sm md:h-7 md:px-2 md:text-xs">
+              All
+            </ToggleGroupItem>
+            <ToggleGroupItem value="down" className="h-10 rounded-md px-3 text-sm md:h-7 md:px-2 md:text-xs">
+              Down
+            </ToggleGroupItem>
+            <ToggleGroupItem value="up" className="h-10 rounded-md px-3 text-sm md:h-7 md:px-2 md:text-xs">
+              Up
+            </ToggleGroupItem>
+          </ToggleGroup>
+        )}
       </div>
 
-      {isLoading ? (
+      {isError ? (
+        <div className="flex flex-col items-center gap-2 py-8 text-center text-sm text-muted-foreground">
+          <p>Answer feedback didn&apos;t load.</p>
+          <Button variant="outline" size="sm" onClick={() => void refetch()}>
+            Try again
+          </Button>
+        </div>
+      ) : isLoading ? (
         <div className="space-y-3">
           <Skeleton className="h-24 w-full" />
           <Skeleton className="h-24 w-full" />
