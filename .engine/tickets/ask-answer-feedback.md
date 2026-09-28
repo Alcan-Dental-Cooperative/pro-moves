@@ -1,6 +1,6 @@
 # Ask Alcan answer feedback
 
-stage: building
+stage: qa
 lane: cross-cutting
 
 ## What changes for a user, and why
@@ -28,7 +28,7 @@ Personas to test as: participant, coach, office manager, org admin, doctor
 ## Status
 
 - QA verdict: pending
-- Stage: building
+- Stage: qa
 
 ---
 
