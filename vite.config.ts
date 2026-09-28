@@ -22,7 +22,12 @@ export default defineConfig(({ mode }) => ({
       // are emitted for everyone but stay inert until a flagged user
       // activates. docs/features/pwa-push-notifications.md
       injectRegister: null,
-      registerType: 'prompt',
+      // autoUpdate (2026-09-28): a new build takes over as soon as the phone
+      // downloads it and the page reloads itself, instead of waiting behind
+      // an "Update available" toast that users stuck on a stale build never
+      // tapped. The check-in/check-out wizards keep drafts in localStorage,
+      // so a reload mid-wizard doesn't lose answers.
+      registerType: 'autoUpdate',
       includeAssets: ['apple-touch-icon.png', 'favicon-32.png', 'brand/promoves-p-icon.svg', 'brand/promoves-wordmark.svg'],
       manifest: {
         name: 'Pro Moves',
@@ -46,6 +51,11 @@ export default defineConfig(({ mode }) => ({
         navigateFallback: '/index.html',
         navigateFallbackDenylist: [/^\/auth\//, /^\/sedation/],
         cleanupOutdatedCaches: true,
+        // Implied by autoUpdate; spelled out because this is what lets a
+        // phone pinned to an old build escape: the browser always fetches
+        // sw.js fresh, and the new worker activates without waiting.
+        skipWaiting: true,
+        clientsClaim: true,
         runtimeCaching: [],
         // PRF-3 split the single ~3.4 MB bundle into a smaller eager main
         // chunk plus many route-level lazy chunks (see App.tsx), but the

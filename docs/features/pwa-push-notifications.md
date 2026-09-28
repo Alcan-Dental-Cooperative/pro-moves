@@ -84,8 +84,11 @@ Phase 1 work item or an explicit accepted behavior.
      have their own close/back affordances.
    - A crashed or errored screen has no refresh. The error boundary (or a
      minimal one, if none exists on the staff routes) must render a
-     "Reload" button. The SW update toast ("new version available, tap to
-     refresh") is the normal reload path after each Lovable publish.
+     "Reload" button. Updates apply themselves (`registerType: 'autoUpdate'`,
+     decided 2026-09-28 after staff were stranded on stale builds behind an
+     update toast they never tapped): the new SW activates on download and
+     the page reloads into it; the app also checks for a new SW whenever it
+     returns to the foreground.
 4. **Status bar and notch.** With the default viewport (no
    `viewport-fit=cover`) iOS insets the app below the status bar
    automatically and shows the page background behind it. With our
@@ -148,8 +151,8 @@ punch list.
 2. SW caching policy: **network-first, app shell only.** Do not cache
    Supabase API responses in v1; stale data is worse than a spinner. The SW
    exists to make the app installable and to receive push.
-3. Update toast wired to the `vite-plugin-pwa` refresh hook (the reload
-   path, B3).
+3. ~~Update toast wired to the `vite-plugin-pwa` refresh hook~~ Replaced
+   by autoUpdate on 2026-09-28 (see B3).
 4. Error boundary with Reload on staff routes (B3).
 5. Invite/reset email + screen copy tweak (B2).
 6. In-app install banner on mobile browsers: Android one-tap via
