@@ -1,6 +1,6 @@
 # Ask Alcan answer feedback
 
-stage: building
+stage: qa
 lane: cross-cutting
 
 ## What changes for a user, and why
@@ -28,7 +28,7 @@ Personas to test as: participant, coach, office manager, org admin, doctor
 ## Status
 
 - QA verdict: fail: the admin list shows the wrong question next to each rated answer, and the chat header still says admins can never read chats (commit 3374cade)
-- Stage: building
+- Stage: qa
 
 ---
 
