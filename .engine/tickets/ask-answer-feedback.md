@@ -46,6 +46,7 @@ Personas to test as: participant, coach, office manager, org admin, doctor
 - **Shipped**: not yet
 - **Undone**: no
 - **Design grade**: 3.0/5 from code (design 3, originality 3, craft 3, works 3)
+- **DB applied**: 2026-09-28 by Claude via Supabase MCP (apply_migration ask_answer_feedback); privacy and question-pairing checks run in rolled-back blocks, all passed, 0 rows left
 
 ## QA report
 
