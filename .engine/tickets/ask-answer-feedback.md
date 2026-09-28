@@ -1,6 +1,6 @@
 # Ask Alcan answer feedback
 
-stage: backlog
+stage: spec-approved
 lane: cross-cutting
 
 ## What changes for a user, and why
@@ -28,7 +28,7 @@ Personas to test as: participant, coach, office manager, org admin, doctor
 ## Status
 
 - QA verdict: pending
-- Stage: backlog
+- Stage: spec-approved
 
 ---
 
