@@ -1,14 +1,11 @@
 import { useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
-import { toast } from '@/hooks/use-toast';
-import { ToastAction } from '@/components/ui/toast';
 import {
   isPwaActive,
   isStandalone,
   isPlatformPwaEligible,
   registerPwaServiceWorker,
-  applyPendingUpdate,
   unregisterAllServiceWorkers,
 } from '@/lib/pwa';
 import { InstallBanner } from './InstallBanner';
@@ -20,8 +17,8 @@ import { InstalledAppNudge } from './InstalledAppNudge';
  * localStorage flag) AND on a mobile platform (or already running
  * standalone), registers the service worker and shows either the
  * full-screen install takeover (install not yet confirmed) or the
- * already-installed browser nudge. The update toast is the reload path in
- * standalone mode, where there is no browser refresh button.
+ * already-installed browser nudge. Updates apply themselves (autoUpdate, see
+ * registerPwaServiceWorker), so there is no update toast.
  *
  * Platform gate (stale-client-refresh-escape, item 4): the rollout flag
  * alone is not enough -- a desktop browser must never register a service
@@ -71,18 +68,7 @@ export function PwaManager() {
 
   useEffect(() => {
     if (!active) return;
-    registerPwaServiceWorker(() => {
-      toast({
-        title: 'Update available',
-        description: 'A new version of Pro Moves is ready.',
-        duration: 1000 * 60 * 60,
-        action: (
-          <ToastAction altText="Refresh now" onClick={() => applyPendingUpdate()}>
-            Refresh
-          </ToastAction>
-        ),
-      });
-    });
+    registerPwaServiceWorker();
   }, [active]);
 
   if (!active) return null;

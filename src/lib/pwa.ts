@@ -230,11 +230,13 @@ export function getInstallPathway(opts: {
 
 /**
  * Register the service worker (prod builds only). Idempotent.
- * onNeedRefresh fires when a new build is waiting; call applyPendingUpdate()
- * to swap and reload — this is the reload path in standalone mode, where
- * there is no browser refresh button.
+ * Runs in autoUpdate mode (vite.config.ts): a new build activates on its own
+ * and the plugin reloads the page into it, so there is no update prompt.
+ * Browsers only look for a new sw.js on navigation, and an installed app on
+ * iOS usually resumes from the background without navigating, so we also
+ * ask for an update check every time the app comes back to the foreground.
  */
-export async function registerPwaServiceWorker(onNeedRefresh: () => void): Promise<void> {
+export async function registerPwaServiceWorker(): Promise<void> {
   if (registered) return;
   if (!('serviceWorker' in navigator)) return;
   if (import.meta.env.DEV) {
@@ -246,8 +248,18 @@ export async function registerPwaServiceWorker(onNeedRefresh: () => void): Promi
   updateServiceWorker = registerSW({
     immediate: true,
     onNeedRefresh: () => {
+      // Not fired in autoUpdate mode; kept so a switch back to 'prompt'
+      // still lets RouteErrorBoundary see a waiting build.
       updateAvailable = true;
-      onNeedRefresh();
+    },
+    onRegisteredSW: (_swUrl, registration) => {
+      if (!registration) return;
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState !== 'visible') return;
+        registration.update().catch((err) => {
+          console.debug('[pwa] update check failed', err);
+        });
+      });
     },
   });
 }
