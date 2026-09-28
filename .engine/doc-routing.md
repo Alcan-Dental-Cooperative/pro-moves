@@ -28,4 +28,5 @@ Fill this in as the project grows. One row per kind of work.
 
 | When the work touches... | Read these |
 |---|---|
-| | |
+| The database: a migration, a table, RLS, an RPC | `CLAUDE.md:79-88` (how migrations ship: SQL Editor, idempotent, never `supabase db push`), `CLAUDE.md:104-118` (key relationships; RLS joining through `practice_groups.organization_id` must run after `20260306190002`), `CLAUDE.md:137-160` (writing migrations; `app.change_reason` and no deletes on `pro_moves` / `pro_move_resources`) |
+| Code that reads a new table or column | `docs/features/mobile-build-instructions.md:32-34`: never regenerate `src/integrations/supabase/types.ts`; hand-type what is missing, the way `useAuth.tsx` does for `pwa_enabled` |
