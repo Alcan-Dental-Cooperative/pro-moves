@@ -1,6 +1,6 @@
 # Ask Alcan answer feedback
 
-stage: qa
+stage: ready
 lane: cross-cutting
 
 ## What changes for a user, and why
@@ -27,8 +27,8 @@ Personas to test as: participant, coach, office manager, org admin, doctor
 
 ## Status
 
-- QA verdict: fail: the admin list shows the wrong question next to each rated answer, and the chat header still says admins can never read chats (commit 3374cade)
-- Stage: qa
+- QA verdict: pass (commit a9bc8a20)
+- Stage: ready
 
 ---
 
@@ -45,114 +45,131 @@ Personas to test as: participant, coach, office manager, org admin, doctor
 - **Local run**: none
 - **Shipped**: not yet
 - **Undone**: no
-- **Design grade**: 2.8/5 from code (design 3, originality 3, craft 2, works 3): no error states
+- **Design grade**: 3.0/5 from code (design 3, originality 3, craft 3, works 3)
 
 ## QA report
 
-### QA: ask-answer-feedback (gate 2)
+### QA round 2: ask-answer-feedback (gate 2)
 
-**Verdict: FAIL at commit 3374cade.** The admin list shows the wrong question next to a rated answer (the question from the previous exchange in that chat, or nothing at all), which both breaks the list and shares a question the asker never rated. On top of that, the Ask Alcan header still promises "No one else can read them, not even admins", which this change makes untrue, and a deleted chat stays on the admin list for up to five minutes in the same session.
+**Verdict: PASS at commit a9bc8a20.** All four round-1 blockers are fixed. Each rated answer now shows its own question. The header tells the truth. The admin list refreshes after every change. Failures show an error. One thing to fix before you run the SQL checks: part 3 of the post-apply checklist in the migration will error as written, and it skips the "non-super-admin gets refused" proof. That is a problem with the checklist text, not the product (details under N1).
 
-Reviewed from code and tests only. `npm run check` passed (tail below).
+I reviewed this from code and tests only. There is no preview and no local run, because the app only talks to the live database. I ran `npm run check` myself at a9bc8a20:
 
 ```
-tsc: clean
-lint: 0 errors, 896 warnings (existing baseline; two new `any` warnings in useAskFeedback.ts, same pattern as useAskAlcanChat.ts)
+✖ 896 problems (0 errors, 896 warnings)   (same baseline as round 1)
 Hardcoded Tailwind color check passed: 372 (down from 374 baseline).
-Test Files  89 passed (89)
-     Tests  1249 passed (1249)
-vite build: built in 16.78s (usual >500 kB chunk warning)
+ Test Files  89 passed (89)
+      Tests  1249 passed (1249)
+✓ built in 13.26s
 EXIT 0
 ```
-
-### Blocking findings (one per fix)
-
-**B1. The admin list pairs each answer with the wrong question.** (Severity: high. It shows wrong data, and it leaks an unrated question, which breaks the consent rule. An outside reviewer would raise it.)
-Both edge functions save the question and the answer in one insert (`supabase/functions/ask-alcan/index.ts:581`, `ask-alcan-v2/index.ts:548`), so the two rows get the exact same `created_at` (Postgres `now()` is fixed for the whole transaction). The migration looks up the question with `uq.created_at < am.created_at` (strictly earlier), so it never finds the matching question. It returns the question from the *previous* exchange in that conversation, or nothing (null) for the first exchange. The first case shows a super admin a question the asker never rated. Fix: pair using `<=` (the matching question is then the latest one at or before the answer), or pair explicitly, and add a post-apply check: "rate the first answer in a new chat; the admin list must show that exact question." Will it come back? Yes. Any query that pairs question and answer by strict timestamp will hit this again. The guard is that post-apply check, plus a comment in `persistExchange` noting that both rows share one timestamp.
-
-**B2. The page header still says admins can never read chats.** (Severity: medium to high on trust. An outside reviewer would likely raise it in a privacy review.)
-`src/pages/ask/AskPage.tsx:585`, which this change did not touch, always shows: "Your conversations are private to you. No one else can read them — not even admins." Once someone rates an answer, super admins *can* read that exchange. The consent line by the buttons tells the truth, but the header now contradicts it. Fix: change the header copy (for example, "...unless you rate an answer, which shares that one question and answer with the Ask Alcan team"). The spec missed this, so John should approve the wording. Note that the existing line also contains an em dash.
-
-**B3. Acceptance step 10 fails within the same session: the admin list is cached.** (Severity: medium. It hurts the "delete removes it" promise. An outside reviewer might raise it.)
-The app caches data for 5 minutes (`src/App.tsx:292`). The admin list uses the cache key `['ask','admin-feedback']`. Nothing refreshes that key: not the rating mutations (they refresh only `['ask','feedback']`, `useAskFeedback.ts:76`) and not conversation delete (`useAskAlcanChat.ts:160-161`). So step 6, then deleting the chat, then going back to Admin (step 10) still shows the deleted exchange until the cache expires or the page reloads. The same thing happens after clearing a rating. Step 8 passes only because the script clears the rating before the list is first opened. Fix: refresh `['ask','admin-feedback']` from all three mutations and from delete conversation, or give that query a stale time of 0.
-
-**B4. Nothing tells the user when a rating fails** (principle: "Every state is designed: loading, empty, error, and success"). (Severity: medium. It is also why the design grade fails.)
-- `setRating` and `clearRating` have no error handler. A failed tap just leaves the button as it was, with no toast.
-- The note's Save button calls `mutateAsync` with no try/catch (`AskPage.tsx`, the Save `onClick`). A failure throws an unhandled promise rejection, "Saved." never shows, and no error appears.
-- `AnswerFeedbackSection` ignores `isError`. If the admin function fails (for example, the frontend ships before the SQL, or the function raises), the section disappears as though there were no feedback.
-Fix: add a toast on error (AskPage already uses `useToast`), and have the admin section show a short error line instead of hiding.
 
 ### Acceptance script
 
 | # | Result |
 |---|---|
-| 1 | Code supports it, operator to confirm. Buttons render only when `role !== 'user'`; the consent line "Rating shares this question and answer with the Ask Alcan team." sits under them; the pending bubble is a user-role message, so it gets no buttons. |
-| 2 | Code supports it, operator to confirm. Highlight comes from the server row (`aria-pressed`, tokenised primary tint), so it survives a reload. |
-| 3 | Code supports it, operator to confirm. Switching upserts on `message_id`; the note box appears on down; Save writes the note and shows "Saved."; the note reloads from the row. |
-| 4 | Code supports it, operator to confirm. Tapping the same rating deletes the row, and the note goes with it (unit tested in `nextFeedbackState`). |
-| 5 | Code supports it, operator to confirm. The note is optional; a down rating with no note is a valid row. |
-| 6 | **FAIL (B1).** Date, up/down, note, answer with show more/less, and cited titles (via `useCitedDocuments`) are all there, with no name. But the question shown is the previous exchange's question, or it is missing. |
-| 7 | Code supports it, operator to confirm. All/Down/Up filter runs client-side (unit tested). |
-| 8 | Code supports it for the script order as written, operator to confirm. If the list was already open this session, it goes stale (B3). |
-| 9 | Pass by code. No policy on `ask_conversations` or `ask_messages` changed; the diff touches only the new table and function. Operator to confirm with a second super admin. |
-| 10 | **FAIL in-session (B3).** The server side is correct (FK cascade from conversation to messages to feedback), but the cached admin list keeps showing the row for up to 5 minutes without a reload. |
-| 11 | Pass by code, operator to confirm. `/ask` and the Admin "Ask Alcan" tab are gated by `useAskAlcanAccess` (super admin), the section gates itself a second time, and the function raises "Not authorized" for anyone else. Anon has execute revoked. |
+| 1 | Code supports it, operator to confirm. Thumbs up and down appear only on answers (`!isUser`). The consent line "Rating shares this question and answer with the Ask Alcan team." sits under them. The pending question bubble has role `user`, so it gets no buttons. |
+| 2 | Code supports it, operator to confirm. The highlight comes from the saved row (`aria-pressed`, `bg-primary/10 text-primary`), so it survives a reload. |
+| 3 | Code supports it, operator to confirm. Switching upserts on `message_id` and keeps any note. The note box shows on down. Save writes the note and shows "Saved.", and the note reloads from the row. |
+| 4 | Code supports it, operator to confirm (new wording). Down to up now sends `note: null` (`nextFeedbackState`, unit tested), so the note is gone. Tapping the chosen down again deletes the row, which takes the note with it (unit tested). |
+| 5 | Code supports it, operator to confirm. A down with no note is a valid row. |
+| 6 | Code supports it, operator to confirm. The list shows the date, Helpful or Missed, the note, the question (now correct, see B1), the answer with Show more and Show less, and the cited titles. No name. |
+| 7 | Code supports it, operator to confirm. The All, Down and Up filter runs on the client and is unit tested. |
+| 8 | Code supports it, operator to confirm. Clearing a rating deletes the row and now also refreshes the admin list. |
+| 9 | Passes by code, operator to confirm with a second super admin. No policy on `ask_conversations` or `ask_messages` changed. The diff adds only the new table, its single owner policy and the function. |
+| 10 | Code supports it, operator to confirm. Deleting a conversation cascades conversation to messages to feedback, and `deleteConversation` now refreshes `['ask','admin-feedback']`, so going back to Admin fetches fresh data without a reload. The "first answer in a brand new chat shows its own question" check is covered by the `<=` fix (see B1). |
+| 11 | Passes by code, operator to confirm per persona. `useAskAlcanAccess` is super admin only. The section checks it again and does not even run the query without it. The function raises "Not authorized" for anyone else, and anon has no execute. |
+
+### Round-1 findings
+
+- **B1 (wrong question paired with each answer): FIXED.** I confirmed from git history that every version of both edge functions, from ASK-1 (`11ae9591`) through today, saves the question and the answer in one bulk insert (`ask-alcan/index.ts:581`, `ask-alcan-v2/index.ts:548`). That means the pair always shares one `created_at`, and so do the older rows already live. The lookup is now `uq.created_at <= am.created_at order by uq.created_at desc, uq.id desc limit 1`.
+  - Can it return another exchange's question? Earlier exchanges each come from a separate request, and so a separate transaction with an earlier timestamp. So the paired question, being the latest at or before the answer, always wins.
+  - A tie would need two exchanges in the same conversation to start their transactions in the same microsecond. That is not realistic, and the code comment says so honestly.
+  - Can it return an unrated question? No. It only ever returns the one question in the same conversation paired with a rated answer.
+  - The one theoretical gap is an asker writing to `ask_messages` directly (see break attempts). That touches only their own content.
+- **B2 (header said not even admins could read chats): FIXED.** `AskPage.tsx` now says, word for word as the spec asks: "Your conversations are private to you. If you rate an answer, that one question and answer is shared with the Ask Alcan team." The old em dash is gone.
+- **B3 (admin list never refreshed): FIXED.** `setRating`, `clearRating` and `saveNote` all refresh both `['ask','feedback']` and `['ask','admin-feedback']`, and `deleteConversation` refreshes `['ask','admin-feedback']`. That covers set, switch, clear, note and delete. A refreshed query refetches when the admin tab next mounts, even inside the 5-minute cache window.
+- **B4 (no error states): FIXED.**
+  - Rating taps and note saves are wrapped in try/catch and show a destructive toast ("That rating didn't save" and "That note didn't save").
+  - The admin section now shows "Answer feedback didn't load." with a Try again button, instead of hiding. The filter is hidden while that error shows.
+- **Round-1 non-blocking notes:**
+  - The note carrying over from down to up is now resolved by John's decision, and the code follows it.
+  - The checklist problems (a) super admin sees 0 rows, (b) askers who are not super admins, and (c) no rollback are all fixed. The checklist is now wrapped in begin and rollback, uses two super admins, and says super admins see their own rows. Its new problems are in N1 below.
+  - (d) The pairing check is now step 4.
 
 ### Browser walk
 
-Could not run. The project config has `preview.kind: "none"` and `localRun: false`, because the app is hard-wired to the live production database and there is no staging database. Clicking through every screen and control, on phone and desktop, and judging the look on real screens is on John's list below.
+Could not run. The config has `preview.kind: "none"` and `localRun: false`, because the app is wired to the live production database and there is no staging database. Every screen and control, on phone and desktop, is on John's list below.
 
-### Design grade (graded from code, not screenshots; no brand pack, judged against principles and docs/design-system.md)
+### Design grade (graded from code, not screenshots; no brand pack, judged against `.engine/principles.md` and `docs/design-system.md`)
 
-Overall 2.8 of 5 (design 3, originality 3, craft 2, works 3). **Fails on craft.**
-- **Design quality 3:** Ghost icon buttons, a primary/destructive tint, `text-2xs` muted helper copy and shadcn cards match the existing Ask and admin screens, but nothing goes beyond that.
-- **Originality 3:** Standard thumbs pattern and a cards list with library defaults, which is appropriate here but not distinctive.
-- **Craft 2:** The error state is missing everywhere (B4), which the principles require. On a phone, the filter chips are 28px tall (`h-7`), below a comfortable tap size. A 24px heading icon sits next to `text-sm` heading text. Tokens and icon sizes are otherwise correct (16px inline, 20px buttons).
-- **Functionality 3:** The main actions are obvious and the copy is plain with no em dashes, but the header's privacy promise now contradicts the consent line (B2), and a failed tap does nothing visible.
+Overall 3.0 of 5 (design 3, originality 3, craft 3, works 3). **No criterion at 1 or 2, so the grade passes.**
+- **Design quality 3:** The ghost icon buttons, primary and destructive tints, muted `text-2xs` helper copy and plain cards match the existing Ask and Admin screens, so it sits with the app (principles: stay consistent with the Pro Moves design system), but nothing goes further than that.
+- **Originality 3:** It is the standard thumbs pattern and a list of cards with library defaults, which fits the job but is not distinctive.
+- **Craft 3:** Loading, empty, error and success states now all exist ("Every state is designed"), and the tokens and icon sizes follow CLAUDE.md. The filter chips are now 40px tall on phones. But the thumbs buttons are 36px (`h-9 w-9`), a little under a comfortable phone tap size, and error toasts show the raw database message.
+- **Functionality 3:** The actions are obvious, the copy is plain with no em dashes on screen, and the header and consent line now agree. The raw database error text in a toast is the one thing a user would not understand.
 
 ### Break attempts
 
-- **Spoofing `staff_id` on insert or update:** blocked. WITH CHECK requires `staff_id = get_current_staff_id()`.
-- **Rating someone else's answer by guessing its id:** blocked. WITH CHECK requires the conversation's owner to be the caller. An upsert that hits another person's existing row fails the UPDATE USING check, so it errors and does not overwrite. Message ids are random uuids, so the leftover "a row exists" signal is negligible.
-- **Rating your own question:** blocked. The policy requires `role = 'assistant'`.
-- **Reading, updating or deleting another person's row:** the USING clause hides it, so zero rows are affected.
-- **Non-super-admin calling the function:** raises before touching any data. `is_superadmin()` (latest definition, `20250828183239_...sql`) is SECURITY DEFINER with a pinned search_path and checks `staff.user_id = auth.uid()`. The new function sets `search_path` and starts from `ask_message_feedback`, so unrated messages cannot come out of it, except for the question lookup bug in B1. It returns no asker identity.
-- **Grants:** execute is revoked from public and anon and granted to authenticated. The table is granted to authenticated and service_role only.
-- **Re-running the migration:** safe. It uses `if not exists`, drop-then-create for the trigger and policy, `create or replace` for the function, grants and revokes that can repeat, and a read-only sanity block. Every dependency already exists live (`ask_messages`, `staff`, `corpus_set_updated_at`, `is_superadmin`, `get_current_staff_id`).
-- **Rapid repeated taps:** both buttons are disabled while a mutation is pending, and `onSuccess` returns the refetch promise, so they stay disabled until fresh data arrives. The upsert avoids unique-violation errors. Two tabs racing each other: the last write wins, and nothing duplicates.
-- **Pending and optimistic bubble:** gets the id `'pending'`, is user role, has no buttons, and is never queried.
-- **Note limits:** the textarea has `maxLength=500` and the DB has a matching check. A whitespace-only note saves as null.
-- **Frontend deployed before the SQL:** rating fails silently and the admin section hides silently (B4). The spec's apply order (SQL first) matters.
-- **Deletion cascades:** conversation to messages to feedback, and staff to feedback, are both `on delete cascade`. Confirmed in the DDL.
+- **Pairing across exchanges:** covered under B1. There is no path to a different exchange's question with real data.
+- **Unrated message through the function:** the function starts from `ask_message_feedback` and joins only the rated answer plus one paired question. Nothing else is reachable. The consent rule holds.
+- **RLS and SECURITY DEFINER guarantees:** unchanged from round 1 apart from the `<=`.
+  - There is one owner-only policy, and the sanity block asserts exactly one policy exists.
+  - `staff_id` and conversation ownership are both checked in USING and in WITH CHECK, and only `role = 'assistant'` messages can be rated.
+  - The function keeps `security definer` and `set search_path to 'public'`, and raises on `not is_superadmin()` before any read.
+  - Execute is revoked from public and anon and granted to authenticated. The function returns no asker identity.
+- **Migration re-run and SQL Editor paste:** still idempotent.
+  - It uses `create table if not exists`, `create index if not exists`, and drop-then-create for the trigger and the policy.
+  - The function uses `create or replace`, and its signature is unchanged, so the replace is legal.
+  - The grants and revokes can repeat safely. The sanity block only reads.
+- **Checklist safety on production:** safe. Every test write sits inside `begin; ... rollback;`. If a statement errors partway through, Postgres aborts the whole transaction, so nothing can be committed even if the script stops before `rollback`. Its correctness problems are in N1.
+- **The asker writing `ask_messages` directly (existing ASK-1 policy is `for all`):** an asker can insert or edit rows in their own conversations through the API. They could fake an "answer", rate it, or edit an answer's text after rating it, so the admin list shows words the model never wrote. This only affects the asker's own content, and all askers are super admins today. It is not a consent leak. Low severity, pre-existing policy, and worth remembering before Ask Alcan opens to wider staff.
+- **Note save racing a thumbs-up tap:** `busy` does not include `saveNote.isPending`, so someone can tap thumbs up while a note save is still in flight. If the note update lands after the upsert, the row ends up "up" with a note, which breaks John's "a helpful rating never carries a note" rule. The UI then hides the note, and the admin card shows Helpful with a note. It needs a fast double action and is low severity. Fix: include `saveNote.isPending` in `busy`.
+- **Rapid double taps:** the buttons are disabled while set or clear is pending, and the upsert avoids duplicates.
+- **Frontend deployed before the SQL:** rating taps now toast an error and the admin section shows its error line, so nothing fails silently. The apply order (SQL first) still matters.
+- **Feedback map fails to load in chat:** the buttons render as unrated with no error line. Low severity, since a tap then either no-ops or reports its own error.
+- **Em dashes:** every em dash in the added source is inside code comments. The on-screen strings have none.
 
 ### Regressions
 
-- **AskPage chat flow:** `ChatMessage` gains optional props, and the pending bubble gets an id. Sending, the pending bubble logic (`computeShowPending`) and delete conversation are unchanged. The only addition is one extra batched query per open conversation. No regression found in the code.
-- **AdminSurveysTab:** the only change is the new section appended after the surveys list, outside the loading, empty and list branches. Surveys render as before.
-- **ask_conversations / ask_messages policies and the edge functions:** untouched (confirmed from the diff file list).
-- **Pre-existing, not caused by this change:** the chat orders messages by `created_at` only, and a question and its answer share a timestamp, so their order on screen is not guaranteed. It is the same root cause as B1 and worth a follow-up ticket.
+- **AskPage:** sending, the pending bubble (`computeShowPending`) and delete are unchanged, apart from the added refresh. The header line changed as the spec asks. I found no regression.
+- **AdminSurveysTab:** the only change is the section appended after the surveys list. Surveys render as before.
+- **`ask_conversations` and `ask_messages` policies and the edge functions:** untouched.
+- **Pre-existing, not caused by this change:** the chat orders messages by `created_at` only (`useAskAlcanChat.ts:66`). A question and its answer share that timestamp, so their order on screen is not guaranteed. Worth a follow-up ticket (for example, add `role` as a tie-break).
 
-### Non-blocking notes
+### Non-blocking findings (one per fix)
 
-- **Judgment call on switching ratings (spec-compatible, but flag for John):** switching from down to up keeps the note. The spec allows a note on any rating, but the asker can no longer see or edit that note while the rating is up (the box shows only on down). Meanwhile the admin list shows a "Helpful" card with a "what was off" note. Consider clearing the note on switch to up, or showing it there.
-- **Explicit Save button for the note and client-side filtering:** both fine against the spec (step 3 says "type a short note and save"). The function still supports `p_rating`.
-- **The `useEffect` that syncs the note draft** says it will not clobber an unsaved edit, but it does whenever the saved note changes. Harmless in practice.
-- **The admin list shows raw answer text,** so markdown from answers appears as literal characters. Cosmetic.
-- **The builder's post-apply checklist in the migration has problems John would trip over:**
-  - (a) It says a super admin running `select * from ask_message_feedback` should see 0 rows. Wrong: they see their own ratings, and today every rater is a super admin.
-  - (b) It uses "staff A and B, neither a super admin" as askers, but both edge functions reject non-super-admins (`ask-alcan-v2/index.ts:268`), so those accounts cannot own conversations.
-  - (c) Its inserts would write real rows to production with no cleanup step. It should be wrapped in `begin; ... rollback;`, and `set local` only works inside a transaction.
-  - (d) It lacks the question-pairing check from B1.
+**N1. Checklist part 3 fails as written and does not prove the non-super-admin rule.**
+Severity: low for users, but it will confuse whoever runs it. An outside reviewer would note it because the spec's ticket breakdown asks for a check list proving "a non-super-admin calling the function gets an error".
+- (a) Part 3 says "as a super admin, no transaction needed" and calls `list_ask_answer_feedback()`. In the SQL Editor the caller is `postgres` with no login, so `is_superadmin()` sees no user and the call raises "Not authorized". Each of those reads needs `begin; set local role authenticated; set local request.jwt.claims = '{"sub":"<super admin auth id>"}'; ... rollback;`.
+- (b) It says no ordinary staff account exists to test the refusal. That is wrong: you do not need to own a conversation to call the function. Set the claims to any participant's auth id inside begin and rollback, and expect "Not authorized". That is the proof the spec asked for.
+- (c) In part 2, B's rejected insert aborts the transaction, so the `update ... expect 0 rows` line after it errors with "current transaction is aborted". Put the rejected insert last, or give it its own begin and rollback. Part 1 already puts its rejected insert last.
+
+Will it come back? Only if the checklist is copied into future migrations. The guard is a standing pattern: every "as user X" check goes in its own begin, set local, rollback block.
+
+**N2. Toasts show raw database errors.** The rating and note toasts use `err.message`, which could read "new row violates row-level security policy...". This matches the existing AskPage toasts for sending and deleting, so it is consistent, but it breaks "plain words on screen". Fix: a plain description with the raw message logged instead. It is a page-wide pattern, so it will come back without a lint or a shared helper.
+
+**N3. The note save can race a thumbs-up tap** (see break attempts). Fix: add `saveNote.isPending` to `busy`.
+
+**N4. Stale comments.**
+- The `AnswerFeedback` docstring still says a note "survives a switch to thumbs up", which is now false.
+- The `useEffect` comment claims it will not clobber an unsaved edit, but it does whenever the saved note changes.
+
+Both are code-only. Nobody sees them on screen.
+
+**N5. The thumbs buttons are 36px on phones.** They are a touch small for a thumb. Consider `h-10 w-10` on phones, as the filter chips now do.
 
 ### NOT VERIFIED
 
-- The body of `get_current_staff_id()`. It is not defined in any repo migration (it exists live per `types.ts:4984`). I assumed it behaves as the live ASK-1 policies already rely on.
-- Whether older live `ask_messages` rows were written with distinct timestamps (an earlier edge-function version). This does not change B1 for new data.
-- Whether the Supabase SQL Editor wraps a paste in one transaction (this matters for the checklist's `set local`).
+- The body of `get_current_staff_id()` and exactly how `is_superadmin()` resolves the caller under `set local request.jwt.claims` in the SQL Editor. I inferred both from how ASK-1 already relies on them. I ran no SQL, by instruction.
+- How the Supabase SQL Editor handles a pasted script with an explicit `begin` when a statement errors, beyond Postgres's own rule that an aborted transaction cannot commit.
+- Live data: I did not query production, so I cannot say whether any existing `ask_messages` rows were written outside the edge functions.
 
 Not verifiable by the agent, only John can check
-- Pasting the migration into the Supabase SQL Editor (before the frontend deploy), confirming the sanity block passes, and running the builder's post-apply checklist, once it is corrected per the notes above (inside begin/rollback so no test rows stay in production).
-- Clicking through steps 1 to 11 on a phone and on a desktop: button highlight, note box, "Saved.", reloads, the admin list, the filter, show more.
-- The two-super-admin privacy check (step 9): B never sees A's chats, and A's rated exchange appears only in the admin list.
+- Pasting `supabase/migrations/20260928140000_ask_answer_feedback.sql` into the Supabase SQL Editor before the frontend deploy, and confirming the sanity block passes (no error).
+- Running the post-apply checklist in the migration, with the N1 corrections (every "as user X" block inside begin, set local, rollback, and a participant's auth id used for the "Not authorized" check), then confirming no test rows remain.
+- The two-super-admin privacy check (step 9): B never sees A's chats, and A's rated exchange appears only in the admin list, with no name.
+- Checklist part 4 in the app: a later answer in a multi-question chat, and the first answer in a brand new chat, each show their own question on the admin list.
+- Clicking through steps 1 to 11 on a phone and on a desktop: button highlight, note box, Save and "Saved.", clear, reloads, delete then Admin with no reload, the filter, Show more, and the error toast if you can provoke one.
 - Step 11 as each persona (participant, coach, office manager, org admin, doctor): Ask Alcan and Answer feedback stay hidden.
-- The look and feel on real screens, and the final wording of the header privacy line (B2).
+- The look and feel on real screens (tap size of the thumbs, spacing of the consent line, the admin cards).
