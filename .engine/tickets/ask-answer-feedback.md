@@ -1,6 +1,6 @@
 # Ask Alcan answer feedback
 
-stage: ready
+stage: shipped
 lane: cross-cutting
 
 ## What changes for a user, and why
@@ -28,7 +28,7 @@ Personas to test as: participant, coach, office manager, org admin, doctor
 ## Status
 
 - QA verdict: pass (commit a9bc8a20)
-- Stage: ready
+- Stage: shipped
 
 ---
 
@@ -43,7 +43,7 @@ Personas to test as: participant, coach, office manager, org admin, doctor
 - **Notes**: must not touch the asker-only policies on `ask_conversations` /
   `ask_messages`. Hand-type the new types; never regenerate `types.ts`.
 - **Local run**: none
-- **Shipped**: not yet
+- **Shipped**: 2026-09-28, branch feature/ask-answer-feedback
 - **Undone**: no
 - **Design grade**: 3.0/5 from code (design 3, originality 3, craft 3, works 3)
 - **DB applied**: 2026-09-28 by Claude via Supabase MCP (apply_migration ask_answer_feedback); privacy and question-pairing checks run in rolled-back blocks, all passed, 0 rows left
