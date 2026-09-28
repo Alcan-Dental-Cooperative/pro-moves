@@ -39,7 +39,30 @@
       "Bash(git stash:*)",
       "Bash(git mv:*)",
       "Bash(git rev-parse:*)",
-      "Bash(git worktree:*)"
+      "Bash(git worktree:*)",
+      "Agent",
+      "Bash(*/engine/bin/engine-ticket *)",
+      "Bash(*/engine/*/bin/engine-ticket *)",
+      "Bash(*/engine/bin/engine-ship-commit *)",
+      "Bash(*/engine/*/bin/engine-ship-commit *)",
+      "Bash(*/engine/preview/local-up *)",
+      "Bash(*/engine/*/preview/local-up *)",
+      "Bash(*/engine/preview/local-down *)",
+      "Bash(*/engine/*/preview/local-down *)",
+      "Bash(*/engine/browser/qa-browser *)",
+      "Bash(*/engine/*/browser/qa-browser *)",
+      "Bash(lsof -nP -iTCP*)",
+      "Bash(ipconfig getifaddr *)",
+      "Bash(ps -p *)",
+      "Bash(curl -s http://127.0.0.1*)",
+      "Bash(curl -s http://localhost*)",
+      "Bash(curl http://127.0.0.1*)",
+      "Bash(curl http://localhost*)",
+      "Bash(curl -s \"http://127.0.0.1*)",
+      "Bash(curl -s \"http://localhost*)",
+      "Bash(curl \"http://127.0.0.1*)",
+      "Bash(curl \"http://localhost*)",
+      "Bash(npm run check *)"
     ],
     "deny": [
       "Bash(rm -rf:*)",
@@ -51,19 +74,6 @@
       "Read(./.env)",
       "Read(./.env.local)",
       "Read(./.env.*)"
-    ]
-  },
-  "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "Bash|Edit|Write",
-        "hooks": [
-          {
-            "type": "command",
-            "command": ".claude/hooks/guard.sh"
-          }
-        ]
-      }
     ]
   }
 }
