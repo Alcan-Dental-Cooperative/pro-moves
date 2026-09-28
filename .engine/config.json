@@ -1,0 +1,56 @@
+{
+  "project": "Pro Moves",
+  "operator": "John",
+  "style": [
+    "Plain, warm language.",
+    "No em dashes."
+  ],
+  "sessionModel": "claude-opus-5-5",
+  "check": "npm run check",
+  "tests": "vitest",
+  "protected": {
+    "branch": "main",
+    "files": [
+      "CLAUDE.md",
+      ".env",
+      ".env.local",
+      "supabase/config.toml"
+    ]
+  },
+  "board": {
+    "kind": "files",
+    "dir": ".engine/tickets"
+  },
+  "ship": {
+    "profile": "lovable-push-main",
+    "extraSteps": null
+  },
+  "preview": {
+    "kind": "none",
+    "localRun": false,
+    "localRunOffBecause": "the app is hard-wired to the live company database (src/integrations/supabase/client.ts). No local run until a staging database exists."
+  },
+  "dbChanges": true,
+  "personas": [
+    "participant",
+    "coach",
+    "office manager",
+    "org admin",
+    "doctor"
+  ],
+  "lanes": {
+    "tinySkipsPr": true
+  },
+  "livingSpec": "docs/living-spec.md",
+  "principles": ".engine/principles.md",
+  "docRouting": ".engine/doc-routing.md",
+  "specsDir": "docs/specs",
+  "design": {
+    "authority": "frontend-design",
+    "brandPack": null,
+    "conventions": [
+      "docs/design-system.md",
+      "promoves-brand/exports/README.md"
+    ]
+  }
+}
