@@ -30,6 +30,12 @@ answer), and nothing else from the chat. Consequences the build must honour:
   the admin list (the feedback row goes, by cascade or by delete).
 - The admin list does not show who asked. (Name is left out on purpose;
   adding it later is a separate decision.)
+- The privacy line at the top of Ask Alcan changes to: "Your conversations
+  are private to you. If you rate an answer, that one question and answer is
+  shared with the Ask Alcan team." (John, 2026-09-28, after QA found the old
+  "not even admins" line.)
+- Switching a rating from down to up clears the note (John, 2026-09-28), so a
+  helpful rating never carries a "what was off" note.
 
 ## Acceptance script
 
@@ -45,7 +51,9 @@ super admin. Use two super-admin accounts (A and B) for the privacy steps.
 3. Tap thumbs down on the same answer. Expect the rating to switch to down,
    and a small optional box asking what was off. Type a short note and save.
    Expect a quiet confirmation, and the note kept after a reload.
-4. Tap thumbs down again (the one already chosen). Expect the rating to clear,
+4. Tap thumbs up. Expect the rating to switch to up and the note to be gone.
+   Tap thumbs down, add a note again, then tap thumbs down again (the one
+   already chosen). Expect the rating to clear,
    and the note with it.
 5. Rate a different answer thumbs down and skip the note. Expect that to work
    with no note.
@@ -58,7 +66,9 @@ super admin. Use two super-admin accounts (A and B) for the privacy steps.
 9. As super admin B, open Ask Alcan and look at the conversation list. Expect
    to see only B's own chats, never A's, exactly as before this change.
 10. As super admin A, delete the conversation from step 5. Go back to the
-    admin list. Expect that rated answer to be gone.
+    admin list without reloading. Expect that rated answer to be gone.
+    Also check the question shown next to the first answer in a brand new
+    chat is that answer's own question.
 11. As any user who is not a super admin (participant, coach, office manager,
     org admin, doctor), check that Ask Alcan and the Answer feedback section
     are still hidden, as before.
