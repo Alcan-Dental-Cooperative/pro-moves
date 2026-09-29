@@ -24,7 +24,7 @@ export function NowProvider({ children, simulatedTime }: NowProviderProps) {
 export function useNow(): Date {
   const context = useContext(NowContext);
   if (!context) {
-    // NowProvider is only mounted when VITE_ENABLE_SIMTOOLS is on
+    // NowProvider is only mounted when sim tools are on (src/lib/simTools.ts)
     // (src/main.tsx) -- it exists to inject simulated time. Without it,
     // real time is the correct answer, not a crash: throwing here broke
     // ThisWeekPanel/ConfidenceWizard/PerformanceWizard in any
