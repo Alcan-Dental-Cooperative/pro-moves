@@ -61,6 +61,15 @@ Drafts never count. Notes = glows and grows only (`observer_glow`,
 7. **Custom end date in the future is not capped at now** (EET ~398-400), so
    upcoming weeks count as Missing. Cap it like quarter mode does.
 8. **Last Submission shows the UTC date.** Use Central (or location) date.
+9. **Self-assessment per domain (asked for after the Q3 file was built).**
+   The eval's "self" number is the weekly performance average stored per
+   item in `evaluation_items.self_score_avg` with `self_score_sample_size`
+   (the eval page shows it as "avg of N weekly submissions", only when
+   N >= 1, with a caution tag at N = 1). `self_score` is just that value
+   rounded to a whole number (all 513 Q3 Alcan items matched), so the Q3
+   hand-built file's "Self Score" column is the rounded version. Export
+   `self_score_avg` and N per competency, and a per-domain self average
+   weighted by N, next to the observer domain columns.
 
 ## Decision for John before building
 
