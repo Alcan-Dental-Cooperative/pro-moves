@@ -25,6 +25,17 @@ Evaluations = every SUBMITTED evaluation for the quarter, released or not.
 Drafts never count. Notes = glows and grows only (`observer_glow`,
 `observer_grow`); newer evals use these instead of `observer_note`.
 
+## Period rule (confirmed by John 2026-09-29)
+
+An evaluation is labeled with the quarter it HAPPENS in but reviews the
+PREVIOUS quarter. So the review workbook pairs the Q3-labeled evaluations
+with Q2 participation (weeks whose Monday falls April 1 to June 30,
+including the week that straddles into July). The export must do this by
+default when a quarter is picked: evals = selected quarter label,
+participation = the quarter before. Also add Hire Date and Pro Moves Start
+(participation_start_at) columns, since late joiners show fewer weeks due.
+The final hand-built file (as of 2026-09-29 11:29 Central) follows this rule.
+
 ## What is already right (verified against live data 2026-09-29)
 
 - Participation math (`get_staff_submission_windows` +
