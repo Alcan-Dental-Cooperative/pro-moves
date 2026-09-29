@@ -43,6 +43,34 @@ After `/qa` passes (ticket is at `stage:ready-to-review`).
    the status skill, step 5). John marks `stage:published` himself after
    Lovable Publish.
 
+## Database changes
+
+Merging does not apply a migration, and the new code fails against the live
+database without it. So when the ticket has one, it is applied **after QA
+passes and before John merges**:
+
+- **Claude applies it** through the Supabase MCP (`apply_migration`), per
+  John's standing preference (2026-09-28): safe, additive, QA-passed changes
+  are run by Claude, not pasted by John. Tell John in one plain line before
+  running it. Never run `supabase db push`: the CLI's migration history does
+  not match this repo's, so it fails or does worse.
+- **Stop and ask John first** when the change is destructive or cannot be
+  undone: dropping or renaming a table or column, deleting or rewriting data.
+  Those also wait until the code that stops using the thing has shipped.
+  If the MCP is not connected, hand John the file path and full SQL for the
+  **SQL Editor** instead, and wait for him to say it ran.
+- Before applying, check the SQL is idempotent, so it is safe to run twice:
+  `CREATE TABLE IF NOT EXISTS`, `ADD COLUMN IF NOT EXISTS`,
+  `CREATE OR REPLACE FUNCTION`, `DROP POLICY IF EXISTS` before
+  `CREATE POLICY`. If it is not, stop and send it back to `/build`.
+- After applying, confirm it is there (for example
+  `select to_regclass('public.<table>');`) and run any post-apply checks the
+  migration lists. Any test writes go inside a block that is rolled back
+  (a `do $$ ... raise exception ... $$` works), so nothing is left in
+  production.
+- Say in the PR body and John's checklist that the migration is already
+  applied.
+
 ## Rules
 
 - Never merge. Never click Publish. Those are John's actions.

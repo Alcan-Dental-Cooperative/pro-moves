@@ -4,8 +4,8 @@
 
 John, the founder, is strong at product thinking, UX intent, requirements, and
 describing behavior — not at reading code or CLI/git mechanics. He is actively
-building that fluency (see `docs/dev-workflow-redesign.md`), but treat him
-as new to this in any
+building that fluency (see `docs/dev-workflow-redesign.md` and
+`docs/dev-workflow-kit-instructions.md`), but treat him as new to this in any
 session, including ones running here in his terminal (Warp), not just the
 desktop app.
 
@@ -24,13 +24,10 @@ Consequences for how you work with him, in this repo specifically:
 - **Default to more explanation, not less**, when a request touches git,
   CI, deploys, or infra he hasn't worked with before. If unsure whether he
   needs the explanation, give the short version and offer to go deeper.
-- Work runs on **the engine** (the `engine` plugin): `engine:spec` turns an
-  ask into a ticket and spec and stops for his OK, `engine:build`,
-  `engine:qa` (a fresh agent that did not build it), then `engine:ship` when
-  he says "ship it". Tickets live in `.engine/tickets/` and show on the board
-  at http://oberhauerstudio:4090/. Project facts are in `.engine/` (config,
-  principles, doc routing). Motion is no longer the board. The kit this
-  replaced is kept, unused, in `docs/archive/claude-kit/`.
+- He is deliberately moving toward the workflow in
+  `docs/dev-workflow-kit-instructions.md` (branches, PRs, a Motion board,
+  human-only merges). Reinforce that workflow's habits in how you present
+  work, even before the tooling in that doc is fully built.
 - If he asks a question that reveals a gap in a foundational concept, answer
   it plainly, and don't act as if it should have been obvious.
 
