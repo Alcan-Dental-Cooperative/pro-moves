@@ -47,42 +47,27 @@ the live schema.
 
 ## Environment variables
 
-Copy `.env.example` to `.env` and fill in real values (or keep the ones
-already checked in — see "About the committed `.env`" below) before running
+Copy `.env.example` to `.env` and fill in real values (see "About `.env`" below) before running
 the app. Each variable is documented with a comment in `.env.example`.
 
 None of the variables currently gate the Supabase connection itself (that's
 hardcoded, see above). The `VITE_*` flags gate optional UI behavior; see the
-comments in `.env.example` and the "About the committed `.env`" section for
+comments in `.env.example` and the "About `.env`" section for
 what's actually wired up versus what's currently dead.
 
-### About the committed `.env`
+### About `.env` (no longer committed)
 
-`.env` is committed to this repo and is **not** gitignored. That's an
-intentional decision for now, not an oversight:
+`.env` was committed until 2026-09-18, then untracked and gitignored. Keep
+your own local copy (from `.env.example`); it holds only publishable values
+and non-secret feature flags.
 
-- Everything currently in it is a publishable/anon-level value or a
-  non-secret feature flag. There is no service-role key, database password,
-  or other secret in it. (Anything genuinely secret, like the Supabase
-  management API token used for schema inspection, must never go in this
-  file or be committed — see CLAUDE.md.)
-- Vite inlines `VITE_*` variables into the built bundle at build time, and
-  this repo has no visible mechanism (CI secrets, a Lovable-specific config
-  file) that supplies those variables another way — the committed `.env` is,
-  as far as this repo shows, the only source for them. `VITE_ENABLE_SIMTOOLS`
-  is one of them: it's actively read in four places
-  (`src/main.tsx`, `src/components/Layout.tsx`,
-  `src/components/home/ThisWeekPanel.tsx`, `src/devtools/SimConsole.tsx`) to
-  decide whether an admin-only debug console ships in the build at all.
-  Untracking `.env` could silently turn that off (or on) the next time
-  Lovable publishes, and there was no way to confirm from this repo alone
-  whether Lovable's Publish build reads this file or injects its own
-  environment configuration instead.
-- Because that couldn't be confirmed, `.env` stays tracked until someone
-  checks Lovable's project settings directly and can show the build gets its
-  environment variables from somewhere else. If that's confirmed, `.env` can
-  be untracked and moved to a local, gitignored file plus the usual
-  per-environment secrets setup.
+What we learned from untracking it: Lovable's Publish build supplies the
+Supabase connection values itself, but NOT custom flags. So any `VITE_*`
+flag that production depends on must default to the production behavior in
+code, not rely on `.env`. `VITE_ENABLE_SIMTOOLS` works this way: it is ON
+unless a build explicitly sets it to `false` (see `src/lib/simTools.ts`).
+Before untracking, it was opt-in, and the admin Sim Console silently
+disappeared from production.
 
 If a real secret ever needs to live in an environment variable for this
 project, it must not go in this file — it needs a different, gitignored

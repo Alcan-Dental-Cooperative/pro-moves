@@ -1,6 +1,7 @@
 import { createRoot } from 'react-dom/client'
 import App from './App.tsx'
 import './index.css'
+import { SIM_TOOLS_ENABLED } from './lib/simTools'
 
 // Global error listener for chunk loading failures (stale deployment recovery)
 window.addEventListener('error', (event) => {
@@ -28,7 +29,7 @@ window.addEventListener('error', (event) => {
 });
 
 // Conditional imports for dev tools
-const enableSimTools = import.meta.env.VITE_ENABLE_SIMTOOLS === 'true';
+const enableSimTools = SIM_TOOLS_ENABLED;
 
 async function renderApp() {
   if (enableSimTools) {

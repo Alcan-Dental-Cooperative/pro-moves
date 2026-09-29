@@ -22,6 +22,7 @@ import { buildWeekBanner } from '@/v2/weekCta';
 import { LearnerLearnDrawer } from '@/components/learner/LearnerLearnDrawer';
 import { cn } from '@/lib/utils';
 import { useMobileShell } from '@/hooks/useMobileShell';
+import { SIM_TOOLS_ENABLED } from '@/lib/simTools';
 
 // Mobile-shell state heading + dot for the hero card (section C.5). Verbatim
 // banner copy from src/v2/weekCta.ts still drives the message/CTA below —
@@ -72,7 +73,7 @@ export default function ThisWeekPanel() {
 
   // Load dev tools conditionally
   useEffect(() => {
-    if (import.meta.env.VITE_ENABLE_SIMTOOLS === 'true') {
+    if (SIM_TOOLS_ENABLED) {
       import('@/devtools/SimConsole').then(module => {
         setSimBannerComponent(() => module.SimBanner);
       }).catch(() => {

@@ -23,6 +23,7 @@ import { useMobileShell } from '@/hooks/useMobileShell';
 import { MobileTabBar } from '@/components/mobile/MobileTabBar';
 import { AvatarMenu } from '@/components/mobile/AvatarMenu';
 import { RouteLoadingFallback } from '@/components/RouteLoadingFallback';
+import { SIM_TOOLS_ENABLED } from '@/lib/simTools';
 // Server-side backfill detection via RPC
 
 export default function Layout() {
@@ -350,7 +351,7 @@ export default function Layout() {
               <div className="flex items-center gap-2">
                 {/* Sim console trigger - only for admins with dev tools enabled */}
                 {(user?.email === 'johno@reallygoodconsulting.org' || user?.email === 'ryanjoberly@gmail.com') && 
-                 import.meta.env.VITE_ENABLE_SIMTOOLS === 'true' && (
+                 SIM_TOOLS_ENABLED && (
                   <Button variant="ghost" size="icon" aria-label="Open simulation console" onClick={() => setIsSimConsoleOpen(true)}>
                     <SettingsIcon className="w-4 h-4" />
                   </Button>

@@ -14,6 +14,7 @@ import { useLocationTimezone } from '@/hooks/useLocationTimezone';
 import { X, Settings, User } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { SIM_TOOLS_ENABLED } from '@/lib/simTools';
 
 // Helper function (same as in centralTime.ts)
 function ctUtcForTz(dayRefUtc: Date, timeHHMMSS: string, tz: string): Date {
@@ -277,7 +278,7 @@ export function SimFloatingButton({ isAdmin }: SimFloatingButtonProps) {
   const [isConsoleOpen, setIsConsoleOpen] = useState(false);
 
   // Only show if admin and dev tools enabled
-  if (!isAdmin || import.meta.env.VITE_ENABLE_SIMTOOLS !== 'true') {
+  if (!isAdmin || !SIM_TOOLS_ENABLED) {
     return null;
   }
 
