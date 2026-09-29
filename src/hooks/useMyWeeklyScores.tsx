@@ -30,6 +30,7 @@ interface MyWeeklyScore {
 interface UseMyWeeklyScoresOptions {
   weekOf?: string | null;
   staffId?: string | null; // Optional staff ID for simulation/masquerade
+  enabled?: boolean; // When false, wait (e.g. until the caller's staff id is known)
 }
 
 export function useMyWeeklyScores(options: UseMyWeeklyScoresOptions = {}) {
@@ -37,9 +38,10 @@ export function useMyWeeklyScores(options: UseMyWeeklyScoresOptions = {}) {
   const [weekSummaries, setWeekSummaries] = useState<Map<string, StaffWeekSummary>>(new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
-  const { weekOf, staffId } = options;
+  const { weekOf, staffId, enabled = true } = options;
 
   const load = useCallback(async () => {
+    if (!enabled) return;
     setLoading(true);
     setError(null);
 
@@ -130,7 +132,7 @@ export function useMyWeeklyScores(options: UseMyWeeklyScoresOptions = {}) {
     } finally {
       setLoading(false);
     }
-  }, [weekOf, staffId]);
+  }, [weekOf, staffId, enabled]);
 
   useEffect(() => {
     load();

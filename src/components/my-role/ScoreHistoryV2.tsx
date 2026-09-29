@@ -7,7 +7,6 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAuth } from '@/hooks/useAuth';
 import { useStaffProfile } from '@/hooks/useStaffProfile';
-import { useSim } from '@/devtools/SimProvider';
 import { format, parseISO, isBefore, startOfDay } from 'date-fns';
 import { useMyWeeklyScores } from '@/hooks/useMyWeeklyScores';
 import { RawScoreRow } from '@/types/coachV2';
@@ -60,13 +59,16 @@ export default function ScoreHistoryV2() {
   const [retiredActionIds, setRetiredActionIds] = useState<Set<number>>(new Set());
   
   const { isSuperAdmin } = useAuth();
-  const { overrides } = useSim();
   const { data: staffProfile } = useStaffProfile({ redirectToSetup: false, showErrorToast: false });
-  const isMasquerading = overrides.enabled && overrides.masqueradeStaffId;
   const staffId = staffProfile?.id || null;
-  const { weekSummaries, loading } = useMyWeeklyScores({ 
+  // Always pass the staff id: get_my_weekly_scores (the no-staffId path)
+  // errors in prod ("column c.action_id does not exist"), while
+  // get_staff_all_weekly_scores works for your own id too (ConfidenceCard
+  // uses it the same way). Wait for the profile so the broken path never runs.
+  const { weekSummaries, loading } = useMyWeeklyScores({
     weekOf: null,
-    staffId: isMasquerading ? staffId : undefined
+    staffId,
+    enabled: !!staffId,
   });
   const queryClient = useQueryClient();
   const navigate = useNavigate();
