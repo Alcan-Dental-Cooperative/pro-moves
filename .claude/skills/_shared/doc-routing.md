@@ -26,6 +26,7 @@ present behaviour against the code or the database before acting on it.
 |------|-------------|
 | Schema / DB | CLAUDE.md sections "Data model & terminology", "Framework content is versioned" and "Applying migrations"; `supabase/migrations/` for the real current schema. There is no trustworthy schema doc right now: `docs/archive/data-model.md` lists five tables dropped on 2026-07-25 as live. DOC-3 will produce a replacement. |
 | Pro Move content | CLAUDE.md "Framework content is versioned" (set `app.change_reason`, no deletes, release cutting) and `docs/pro-move-versioning-implementation-plan.md`. For terminology use CLAUDE.md and `docs/enterprise-architecture.md`, not `docs/archive/glossary.md`, whose table rows name dropped tables. |
+| Code that reads a new table or column | `docs/features/mobile-build-instructions.md:32-34`: never regenerate `src/integrations/supabase/types.ts`; hand-type what is missing, the way `useAuth.tsx` does for `pwa_enabled`. Shipping a migration: the ship skill, "Database changes". |
 | Mobile UI | `docs/features/mobile-design-principles.md`, `docs/features/mobile-build-instructions.md` Ground rules, gating via `useMobileShell` |
 | Evaluations | `src/components/review/` and the hollow-evals guard (see memory). The `docs/archive/features/evaluation-*.md` set is the 2026-06 planning series, partly shipped, and is history rather than a description of the live surface. |
 | Coaching / leads | `docs/management-model.md` |

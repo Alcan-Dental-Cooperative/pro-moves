@@ -1,6 +1,6 @@
 # Spec: Ask Alcan answer feedback
 
-Ticket: `.engine/tickets/ask-answer-feedback.md`  
+Ticket: `docs/archive/engine/tickets/ask-answer-feedback.md`  
 Lane: cross-cutting
 
 ## What and why
@@ -145,7 +145,7 @@ the row and RPC result locally, as `useAskAlcanChat.ts` and `useAuth.tsx` do.
 
 ## Docs the builder must read
 
-- `.engine/principles.md` (people will see this)
+- `docs/archive/engine/principles.md` (people will see this)
 - The database row: `CLAUDE.md:79-88` (migrations ship through the SQL Editor,
   idempotent, never `supabase db push`), `CLAUDE.md:104-118` (key
   relationships and the RLS ordering rule), `CLAUDE.md:137-160` (writing
@@ -159,7 +159,7 @@ the row and RPC result locally, as `useAskAlcanChat.ts` and `useAuth.tsx` do.
   (the consent-scoped tables and their policies).
 - `docs/design-system.md` for the buttons, note box and list (icon sizes and
   colour tokens from `CLAUDE.md`, no hard-coded Tailwind colours).
-- `docs/living-spec.md` is still the empty template, so it adds nothing here.
+- `docs/archive/engine/living-spec.md` was still the empty template, so it adds nothing here.
 
 ## Ticket breakdown
 
