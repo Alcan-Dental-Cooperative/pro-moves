@@ -172,6 +172,58 @@ export type Database = {
           },
         ]
       }
+      ask_message_feedback: {
+        Row: {
+          created_at: string
+          id: string
+          message_id: string
+          note: string | null
+          rating: number
+          staff_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          message_id: string
+          note?: string | null
+          rating: number
+          staff_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          message_id?: string
+          note?: string | null
+          rating?: number
+          staff_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ask_message_feedback_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: true
+            referencedRelation: "ask_messages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ask_message_feedback_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ask_message_feedback_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "view_evaluation_items_enriched"
+            referencedColumns: ["staff_id"]
+          },
+        ]
+      }
       ask_messages: {
         Row: {
           cited_document_ids: string[]
@@ -2146,6 +2198,20 @@ export type Database = {
           viewed_at?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "evaluations_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "evaluations_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "v_onboarding_progress"
+            referencedColumns: ["location_id"]
+          },
           {
             foreignKeyName: "evaluations_released_by_fkey"
             columns: ["released_by"]
@@ -5377,6 +5443,18 @@ export type Database = {
       is_super_admin: { Args: { _user_id: string }; Returns: boolean }
       is_superadmin: { Args: never; Returns: boolean }
       is_survey_admin_for: { Args: { _survey_id: string }; Returns: boolean }
+      list_ask_answer_feedback: {
+        Args: { p_rating?: number }
+        Returns: {
+          answer: string
+          cited_document_ids: string[]
+          created_at: string
+          feedback_id: string
+          note: string
+          question: string
+          rating: number
+        }[]
+      }
       mark_eval_viewed: { Args: { p_eval_id: string }; Returns: undefined }
       org_id_of_location: { Args: { _location_id: string }; Returns: string }
       org_id_of_staff: { Args: { _staff_id: string }; Returns: string }
