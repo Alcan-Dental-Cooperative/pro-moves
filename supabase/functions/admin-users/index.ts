@@ -1631,7 +1631,7 @@ serve(async (req: Request) => {
           const { data: evals, error: evalsErr } = await admin
             .from("evaluations")
             .select("id")
-            .or(`staff_id.eq.${sid},evaluator_id.eq.${sid},released_by.eq.${sid}`);
+            .eq("staff_id", sid);
           if (evalsErr) throw new Error(`Failed to load evaluations: ${evalsErr.message}`);
           const evalIds = (evals ?? []).map((e: any) => e.id);
 
@@ -1640,15 +1640,15 @@ serve(async (req: Request) => {
               "evaluation items",
               admin.from("evaluation_items").delete().in("evaluation_id", evalIds),
             );
+            await requireDelete(
+              "staff quarter focus (by eval)",
+              admin.from("staff_quarter_focus").delete().in("evaluation_id", evalIds),
+            );
           }
 
           await requireDelete(
             "evaluations (staff)",
             admin.from("evaluations").delete().eq("staff_id", sid),
-          );
-          await requireDelete(
-            "evaluations (evaluator)",
-            admin.from("evaluations").delete().eq("evaluator_id", sid),
           );
           // Never delete OTHER people's evals just because this person released
           // them (pre-2026-08-05 behavior deleted them — a footgun for admins);
@@ -1823,6 +1823,7 @@ serve(async (req: Request) => {
           const { data: evals } = await admin.from("evaluations").select("id").or(`staff_id.eq.${sid},evaluator_id.eq.${sid},released_by.eq.${sid}`);
           if ((evals ?? []).length > 0) {
             await requireDelete("eval items", admin.from("evaluation_items").delete().in("evaluation_id", (evals ?? []).map((e: any) => e.id)));
+            await requireDelete("staff quarter focus (by eval)", admin.from("staff_quarter_focus").delete().in("evaluation_id", (evals ?? []).map((e: any) => e.id)));
           }
           await requireDelete("evals (staff)", admin.from("evaluations").delete().eq("staff_id", sid));
           await requireDelete("evals (evaluator)", admin.from("evaluations").delete().eq("evaluator_id", sid));
