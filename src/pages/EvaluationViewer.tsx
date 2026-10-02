@@ -280,7 +280,7 @@ export default function EvaluationViewer() {
             .eq('id', evalData.evaluator_id)
             .maybeSingle();
           if (cancelled) return;
-          if (evaluatorData) setEvaluatorName(evaluatorData.name);
+          setEvaluatorName(evaluatorData?.name ?? 'Former staff');
         }
 
         // Set back URL: if coach viewing another staff's evaluation, go to that staff's page
