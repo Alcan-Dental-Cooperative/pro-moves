@@ -13,6 +13,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Loader2, PauseCircle, Wrench, ChevronDown, Stethoscope, Shield } from "lucide-react";
 import { format, addDays, differenceInDays } from "date-fns";
 import { cn } from "@/lib/utils";
+import { isAssignableRoleOption } from "@/lib/roleArchetypes";
 
 interface Role {
   role_id: number;
@@ -136,6 +137,7 @@ export function EditUserDrawer({ open, onClose, onSuccess, user, roles, location
   const [pauseReason, setPauseReason] = useState<string>('');
   const [allowBackfill, setAllowBackfill] = useState<boolean>(false);
   const [selectedLocationId, setSelectedLocationId] = useState<string>('');
+  const [selectedRoleId, setSelectedRoleId] = useState<string>('');
   const [doctorPortalAccess, setDoctorPortalAccess] = useState<boolean>(false);
   const [clinicalDirectorAccess, setClinicalDirectorAccess] = useState<boolean>(false);
 
@@ -152,6 +154,7 @@ export function EditUserDrawer({ open, onClose, onSuccess, user, roles, location
     setEditName(user.name || '');
     setEditEmail(user.email || '');
     setSelectedLocationId(user.location_id || '');
+    setSelectedRoleId(user.role_id ? String(user.role_id) : '');
     setIsPaused(user.is_paused ?? false);
     setPauseReason(user.pause_reason || '');
     setCapsLoaded(false);
@@ -288,6 +291,7 @@ export function EditUserDrawer({ open, onClose, onSuccess, user, roles, location
         email: editEmail.trim() || null,
         allow_backfill: allowBackfill,
         location_id: selectedLocationId || null,
+        ...(selectedRoleId ? { role_id: Number(selectedRoleId) } : {}),
         capabilities,
         participation_start_at: PARTICIPANT_PRESETS.includes(selectedAction) && participationStartAt
           ? participationStartAt
@@ -591,6 +595,23 @@ export function EditUserDrawer({ open, onClose, onSuccess, user, roles, location
             <p className="text-xs text-muted-foreground">
               When enabled, this user gets a "Clinical" link in their sidebar and can invite and manage doctors from the Clinical Director Portal. Combine with Doctor Portal Access above to let a clinical director also participate as a doctor.
             </p>
+          </div>
+
+          {/* Position (role_id) */}
+          <div className="space-y-2">
+            <Label className="text-base font-semibold">Role</Label>
+            <Select value={selectedRoleId} onValueChange={setSelectedRoleId}>
+              <SelectTrigger>
+                <SelectValue placeholder="No role set — choose one" />
+              </SelectTrigger>
+              <SelectContent>
+                {roles
+                  .filter((r) => isAssignableRoleOption(r as any) || String(r.role_id) === selectedRoleId)
+                  .map((r) => (
+                    <SelectItem key={r.role_id} value={String(r.role_id)}>{r.role_name}</SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
           </div>
 
           {/* Role preset */}

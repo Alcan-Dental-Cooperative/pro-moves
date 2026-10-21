@@ -849,6 +849,13 @@ serve(async (req: Request) => {
         if (location_id !== undefined) {
           updates.primary_location_id = location_id;
         }
+        // Optional position (role_id) change — lets admins fix users created without one.
+        const newRoleId = (payload as any)?.role_id;
+        if (newRoleId !== undefined && newRoleId !== null && newRoleId !== currentStaff.role_id) {
+          const displayOnlyErr = await rejectDisplayOnlyRole(admin, newRoleId);
+          if (displayOnlyErr) return displayOnlyErr;
+          updates.role_id = newRoleId;
+        }
 
         // Doctor portal access — additive flag, layered on top of any preset (including clinical_director).
         // The 'doctor' preset already sets is_doctor=true via the preset config; for all other presets,
