@@ -1,0 +1,1 @@
+UPDATE public.staff SET is_office_manager = true WHERE id = '1a7b82e7-150a-40a2-80d1-2388905cd86b';
