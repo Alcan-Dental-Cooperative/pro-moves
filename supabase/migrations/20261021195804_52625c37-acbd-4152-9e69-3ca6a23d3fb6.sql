@@ -1,0 +1,1 @@
+UPDATE public.staff SET role_id = 3 WHERE id = '1a7b82e7-150a-40a2-80d1-2388905cd86b' AND role_id IS NULL;
