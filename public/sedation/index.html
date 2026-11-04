@@ -91,6 +91,9 @@
     appearance: none; -webkit-appearance: none; min-height: 42px;
   }
   .field input:focus { outline: 2px solid var(--input-focus); outline-offset: 1px; }
+  .field input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
+  .field input[type="number"]::-webkit-outer-spin-button,
+  .field input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; display: none; }
   .field input.invalid { border-color: var(--danger); background: var(--danger-bg); }
   .field input.suspect { border-color: #E5C98E; background: #FCF4E4; }
   .input-wrap { position: relative; }
